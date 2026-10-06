@@ -4,18 +4,32 @@ const mongoose = require("mongoose");
 // so old orders stay correct even if the menu changes later.
 const orderItemSchema = new mongoose.Schema(
   {
-    menuItem: { type: mongoose.Schema.Types.ObjectId, ref: "MenuItem", required: true },
+    menuItem: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "MenuItem",
+      required: true,
+    },
     name: { type: String, required: true },
     price: { type: Number, required: true, min: 0 },
     quantity: { type: Number, required: true, min: 1 },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const orderSchema = new mongoose.Schema(
   {
-    customer: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-    restaurant: { type: mongoose.Schema.Types.ObjectId, ref: "Restaurant", required: true },
+    customer: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true
+    },
+    restaurant: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Restaurant",
+      required: true,
+      index: true
+    },
     items: {
       type: [orderItemSchema],
       validate: {
@@ -29,9 +43,13 @@ const orderSchema = new mongoose.Schema(
       enum: ["placed", "preparing", "delivered", "cancelled"],
       default: "placed",
     },
-    paymentMethod: { type: String, enum: ["upi", "card", "cod"], default: "cod" },
+    paymentMethod: {
+      type: String,
+      enum: ["upi", "card", "cod"],
+      default: "cod",
+    },
   },
-  { timestamps: { createdAt: true, updatedAt: false } }
+  { timestamps: { createdAt: true, updatedAt: false } },
 );
 
 module.exports = mongoose.model("Order", orderSchema);
