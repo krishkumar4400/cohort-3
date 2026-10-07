@@ -1,32 +1,28 @@
-import React, { useEffect } from 'react'
-import { useAuthContext } from "../context/AuthProvider"
-import useApi from "../../shared/useApi"
-
+import { useEffect } from "react";
+import { useAuthContext } from "../context/AuthProvider";
+import useApi from "../../shared/useApi";
 
 const Profile = () => {
+  const authContext = useAuthContext();
+  const api = useApi();
 
-    const authContext = useAuthContext()
-    const api = useApi()
+  async function fetchProfile() {
+    const response = await api.get("/auth/me");
 
-    async function fetchProfile() {
+    authContext.setUser(response.data.data.user);
+  }
 
-        const response = await api.get("/auth/me")
+  useEffect(() => {
+    fetchProfile();
+  }, []);
 
-        authContext.setUser(response.data.data.user)
+  return (
+    <main>
+      <h1>Profile</h1>
+      <p>Name: {authContext.user?.name}</p>
+      <p>Email: {authContext.user?.email}</p>
+    </main>
+  );
+};
 
-    }
-
-    useEffect(() => {
-        fetchProfile()
-    },[])
-
-    return (
-        <main>
-            <h1>Profile</h1>
-            <p>Name: {authContext.user?.name}</p>
-            <p>Email: {authContext.user?.email}</p>
-        </main>
-    )
-}
-
-export default Profile
+export default Profile;

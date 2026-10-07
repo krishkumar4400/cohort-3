@@ -2,11 +2,8 @@ import { createContext, useContext, useState } from 'react'
 
 const AuthContext = createContext()
 
-
-
 export function useAuthContext() {
     const context = useContext(AuthContext)
-    
 
     if (!context) {
         throw new Error("useAuthContext must be used within an AuthProvider")
@@ -27,4 +24,3 @@ export default function AuthProvider({ children }) {
         </AuthContext.Provider>
     )
 }
-
