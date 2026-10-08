@@ -34,3 +34,30 @@
     },
   },
 ];
+
+[
+  {
+    $match: {
+      status: "delivered",
+      createdAt: {
+        $gte: datetime(2026, 9, 30, 14, 57, 29, (tzinfo = timezone.utc)),
+      },
+    },
+  },
+  {
+    $group: {
+      _id: "$restaurant",
+      totalRevenue: {
+        $sum: "$totalAmount",
+      },
+    },
+  },
+  {
+    $limit: 5,
+  },
+  {
+    $sort: {
+      totalRevenue: -1,
+    },
+  },
+];
