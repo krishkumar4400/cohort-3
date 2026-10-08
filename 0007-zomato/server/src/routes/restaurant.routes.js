@@ -5,8 +5,14 @@ const {
   createRestaurant,
   updateRestaurant,
   deleteRestaurant,
+  getRestaurantRevenue,
 } = require("../controllers/restaurant.controller");
-const { getMenu, createMenuItem, updateMenuItem, deleteMenuItem } = require("../controllers/menu.controller");
+const {
+  getMenu,
+  createMenuItem,
+  updateMenuItem,
+  deleteMenuItem,
+} = require("../controllers/menu.controller");
 const { getRestaurantOrders } = require("../controllers/order.controller");
 const { getRestaurantReviews } = require("../controllers/review.controller");
 const { authUser, authorize } = require("../middlewares/auth.middleware");
@@ -24,12 +30,19 @@ router.delete("/:id", authUser, authorize("owner"), deleteRestaurant);
 router.get("/:id/menu", getMenu);
 router.post("/:id/menu", authUser, authorize("owner"), createMenuItem);
 router.patch("/:id/menu/:itemId", authUser, authorize("owner"), updateMenuItem);
-router.delete("/:id/menu/:itemId", authUser, authorize("owner"), deleteMenuItem);
+router.delete(
+  "/:id/menu/:itemId",
+  authUser,
+  authorize("owner"),
+  deleteMenuItem,
+);
 
 // Orders of a restaurant (owner dashboard)
 router.get("/:id/orders", authUser, authorize("owner"), getRestaurantOrders);
 
 // Reviews of a restaurant
 router.get("/:id/reviews", getRestaurantReviews);
+
+router.get("/:id/revenue", authUser, getRestaurantRevenue);
 
 module.exports = router;

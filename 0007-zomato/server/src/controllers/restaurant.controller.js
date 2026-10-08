@@ -2,6 +2,8 @@ const Restaurant = require("../models/restaurant.model");
 const MenuItem = require("../models/menuItem.model");
 const getPagination = require("../utils/pagination");
 const findOwnedRestaurant = require("../utils/ownership");
+const orderModel = require("../models/order.model");
+const mongoose = require("mongoose");
 
 // Turns lng/lat from the request body into a GeoJSON point (or null if invalid)
 function buildLocation(lng, lat) {
@@ -9,10 +11,14 @@ function buildLocation(lng, lat) {
   const latitude = Number(lat);
 
   const isValid =
-    lng !== undefined && lat !== undefined &&
-    Number.isFinite(longitude) && Number.isFinite(latitude) &&
-    longitude >= -180 && longitude <= 180 &&
-    latitude >= -90 && latitude <= 90;
+    lng !== undefined &&
+    lat !== undefined &&
+    Number.isFinite(longitude) &&
+    Number.isFinite(latitude) &&
+    longitude >= -180 &&
+    longitude <= 180 &&
+    latitude >= -90 &&
+    latitude <= 90;
 
   return isValid ? { type: "Point", coordinates: [longitude, latitude] } : null;
 }
@@ -31,12 +37,21 @@ async function getRestaurants(req, res) {
     Restaurant.countDocuments(filter),
   ]);
 
-  res.json({ page, limit, total, totalPages: Math.ceil(total / limit), restaurants });
+  res.json({
+    page,
+    limit,
+    total,
+    totalPages: Math.ceil(total / limit),
+    restaurants,
+  });
 }
 
 // GET /api/restaurants/:id
 async function getRestaurantById(req, res) {
-  const restaurant = await Restaurant.findById(req.params.id).populate("owner", "name");
+  const restaurant = await Restaurant.findById(req.params.id).populate(
+    "owner",
+    "name",
+  );
   if (!restaurant) {
     return res.status(404).json({ message: "Restaurant not found" });
   }
@@ -68,7 +83,10 @@ async function createRestaurant(req, res) {
 
 // PATCH /api/restaurants/:id  (owner, own restaurant only)
 async function updateRestaurant(req, res) {
-  const { restaurant, error } = await findOwnedRestaurant(req.params.id, req.user.id);
+  const { restaurant, error } = await findOwnedRestaurant(
+    req.params.id,
+    req.user.id,
+  );
   if (error) {
     return res.status(error.status).json({ message: error.message });
   }
@@ -84,7 +102,9 @@ async function updateRestaurant(req, res) {
   if (req.body.lng !== undefined || req.body.lat !== undefined) {
     const location = buildLocation(req.body.lng, req.body.lat);
     if (!location) {
-      return res.status(400).json({ message: "Send both lng and lat with valid values" });
+      return res
+        .status(400)
+        .json({ message: "Send both lng and lat with valid values" });
     }
     restaurant.location = location;
   }
@@ -95,7 +115,10 @@ async function updateRestaurant(req, res) {
 
 // DELETE /api/restaurants/:id  (owner, own restaurant only)
 async function deleteRestaurant(req, res) {
-  const { restaurant, error } = await findOwnedRestaurant(req.params.id, req.user.id);
+  const { restaurant, error } = await findOwnedRestaurant(
+    req.params.id,
+    req.user.id,
+  );
   if (error) {
     return res.status(error.status).json({ message: error.message });
   }
@@ -107,10 +130,102 @@ async function deleteRestaurant(req, res) {
   res.json({ message: "Restaurant deleted" });
 }
 
+// GET /api/restaurants/:id/revenue(owner, own restaurant only)
+/**
+ * res = {
+ * message: "Revenue Details",
+ *  revenue: number,
+ * from: "2024-06-01",
+ * to: "2024-06-07",
+ * days: [
+ *  { date: "2024-06-01", revenue: 1000 },
+ *  { date: "2024-06-02", revenue: 2000 },
+ *  ...
+ * ]
+ * }
+ */
+async function getRestaurantRevenue(req, res) {
+  const { id } = req.params;
+  const to = req.params.to ? new Date(req.query.to) : new Date();
+  const from = req.query.from
+    ? new Date(req.query.from)
+    : new Date(to.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+  from.setHours(0, 0, 0, 0);
+
+  const restaurant = await findOwnedRestaurant(id, req.user.id);
+
+  const response = await orderModel.aggregate([
+    {
+      $match: {
+        restaurant: new mongoose.Types.ObjectId(id),
+        status: "delivered",
+        createdAt: {
+          $gte: from,
+          $lte: to,
+        },
+      },
+    },
+    {
+      $group: {
+        _id: {
+          $dateToString: {
+            format: "%Y-%m-%d",
+            date: "$createdAt",
+          },
+        },
+        totalRevenue: {
+          $sum: "$totalAmount",
+        },
+      },
+    },
+    {
+      $sort: {
+        _id: 1,
+      },
+    },
+    {
+      $project: {
+        date: "$_id",
+        revenue: "$totalRevenue",
+        _id: 0,
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        total: {
+          $sum: "$revenue",
+        },
+        days: {
+          $push: "$$ROOT",
+        },
+      },
+    },
+    {
+      $project: {
+        _id: 0,
+        total: 1,
+        days: 1,
+      },
+    },
+  ]);
+
+  console.log(response);
+
+  const revenue = response.length > 0 ? response[0] : { total: 0, days: [] };
+  return res.status(200).json({
+    message: "Revenue has been fetched successfully",
+    success: true,
+    revenue,
+  });
+}
+
 module.exports = {
   getRestaurants,
   getRestaurantById,
   createRestaurant,
   updateRestaurant,
   deleteRestaurant,
+  getRestaurantRevenue,
 };
