@@ -151,7 +151,7 @@ async function getRestaurantRevenue(req, res) {
     ? new Date(req.query.from)
     : new Date(to.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-  from.setHours(0, 0, 0, 0);
+  from.setUTCHours(0, 0, 0, 0);
 
   const restaurant = await findOwnedRestaurant(id, req.user.id);
 
@@ -215,8 +215,10 @@ async function getRestaurantRevenue(req, res) {
 
   const revenue = response.length > 0 ? response[0] : { total: 0, days: [] };
   return res.status(200).json({
-    message: "Revenue has been fetched successfully",
+    message: "Revenue details",
     success: true,
+    from: from.toISOString(),
+    to: to.toISOString(),
     revenue,
   });
 }
