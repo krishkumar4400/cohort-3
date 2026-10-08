@@ -224,9 +224,65 @@ async function getRestaurantRevenue(req, res) {
 }
 
 async function getTopCustomers(req, res) {
-  const {id} = req.params;
-  const response = await orderModel.aggregate();
+  const { id } = req.params;
+  const response = await orderModel.aggregate([
+    {
+      $match: {
+        restaurant: new mongoose.Types.ObjectId(id),
+        status: "delivered",
+      },
+    },
+    {
+      $group: {
+        _id: "$customer",
+        totalAmount: {
+          $sum: "$totalAmount",
+        },
+        totalOrder: {
+          $sum: 1,
+        },
+        avgOrderValue: {
+          $avg: "$totalAmount",
+        },
+      },
+    },
+    {
+      $limit: 3,
+    },
+    {
+      $sort: {
+        totalAmount: -1,
+      },
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "_id",
+        foreignField: "_id",
+        as: "user",
+        pipeline: [
+          {
+            $project: {
+              email: 1,
+              name: 1,
+            },
+          },
+        ],
+      },
+    },
+    {
+      $unwind: {
+        path: "$user",
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+  ]);
   console.log(response);
+  return res.status(200).json({
+    message: "Top Customers",
+    success: true,
+    topCustomers: response,
+  });
 }
 
 module.exports = {
