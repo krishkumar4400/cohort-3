@@ -223,6 +223,12 @@ async function getRestaurantRevenue(req, res) {
   });
 }
 
+async function getTopCustomers(req, res) {
+  const {id} = req.params;
+  const response = await orderModel.aggregate();
+  console.log(response);
+}
+
 module.exports = {
   getRestaurants,
   getRestaurantById,
@@ -230,4 +236,5 @@ module.exports = {
   updateRestaurant,
   deleteRestaurant,
   getRestaurantRevenue,
+  getTopCustomers,
 };

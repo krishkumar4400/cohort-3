@@ -6,6 +6,7 @@ const {
   updateRestaurant,
   deleteRestaurant,
   getRestaurantRevenue,
+  getTopCustomers,
 } = require("../controllers/restaurant.controller");
 const {
   getMenu,
@@ -44,5 +45,8 @@ router.get("/:id/orders", authUser, authorize("owner"), getRestaurantOrders);
 router.get("/:id/reviews", getRestaurantReviews);
 
 router.get("/:id/revenue", authUser, getRestaurantRevenue);
+
+// restaurants/:id/top-customers
+router.get("/:id/top-customers", authUser, getTopCustomers);
 
 module.exports = router;
