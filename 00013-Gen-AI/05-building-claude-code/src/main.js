@@ -15,8 +15,10 @@ async function main() {
   const response = await getApiKey();
   if (response.error) {
     console.error(response.error);
-    readline.close();
-    return;
+    const apiKey = await readline.question("Enter your API key: ");
+    await saveApiKey(apiKey);
+    console.log("API key saved to settings.json.");
+    return main(); // Restart the process to validate the new API key
   }
 
   const apiKey = response.apiKey;
