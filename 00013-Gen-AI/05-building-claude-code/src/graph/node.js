@@ -10,7 +10,8 @@ import { ChatGroq } from "@langchain/groq";
 import { getApiKey } from "../utils/file.js";
 import { AIMessage } from "langchain";
 
-export async function LLMNode(state) {
+export async function LLMNode(state, config) {
+    console.log(config);
   const model = new ChatGroq({
     model: "openai/gpt-oss-120b",
     apiKey: (await getApiKey()).apiKey,

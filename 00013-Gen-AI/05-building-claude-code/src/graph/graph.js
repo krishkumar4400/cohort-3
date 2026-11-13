@@ -30,7 +30,7 @@ export default async function runGraph() {
       process.exit(0);
     }
     messages.push(new HumanMessage(userInput));
-    const response = await graph.invoke({ messages });
+    const response = await graph.invoke({ messages }, {context: {username: "Krish"}});
     messages = response.messages;
   }
 }
