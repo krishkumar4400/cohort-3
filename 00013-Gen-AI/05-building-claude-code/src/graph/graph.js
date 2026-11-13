@@ -1,9 +1,8 @@
-import { StateSchema, StateGraph, START, END } from "@langchain/langgraph";
+import { StateGraph, START, END } from "@langchain/langgraph";
 import * as z from "zod";
 import { LLMNode } from "./node.js";
 import readline from "../utils/readline.js";
 import { HumanMessage } from "langchain";
-
 
 const state = z.object({
   messages: z.array(z.any()),
@@ -28,9 +27,5 @@ export default async function runGraph() {
     const response = await graph.invoke({
       messages: [new HumanMessage(userInput)],
     });
-    console.log(
-      "Response:",
-      response.messages[response.messages.length - 1].content,
-    );
   }
 }
