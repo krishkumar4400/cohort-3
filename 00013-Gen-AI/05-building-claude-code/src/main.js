@@ -1,4 +1,5 @@
-import runGraph from "./graph/graph.js";
+
+import runGraph from "./ai/graph/graph.js";
 import { getApiKey, getSettingsFileContent, saveApiKey } from "./utils/file.js";
 import readline from "./utils/readline.js";
 

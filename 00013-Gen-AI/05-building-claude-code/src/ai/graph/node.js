@@ -7,16 +7,20 @@
 // concat method in langchain ??
 
 import { ChatGroq } from "@langchain/groq";
-import { getApiKey } from "../utils/file.js";
+import { getApiKey } from "../../utils/file.js";
 import { AIMessage } from "langchain";
+import { upsertFilesTool } from "../tools/files.tool.js";
 
 export async function LLMNode(state, config) {
-    console.log(config);
+  console.log(config);
   const model = new ChatGroq({
     model: "openai/gpt-oss-120b",
     apiKey: (await getApiKey()).apiKey,
   });
-  const stream = await model.stream(state.messages);
+
+  const modelWithTool = model.bindTools([upsertFilesTool]);
+
+  const stream = await modelWithTool.stream(state.messages);
 
   let aiMessage = "";
 
@@ -24,6 +28,7 @@ export async function LLMNode(state, config) {
   for await (const message of stream) {
     process.stdout.write(message.text);
     aiMessage += message.text;
+    console.log(message);
   }
   process.stdout.write("\n");
 

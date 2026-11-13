@@ -1,8 +1,10 @@
 import { StateGraph, START, END } from "@langchain/langgraph";
 import * as z from "zod";
 import { LLMNode } from "./node.js";
-import readline from "../utils/readline.js";
+import readline from "../../utils/readline.js";
 import { HumanMessage, SystemMessage } from "langchain";
+
+console.log(process.cwd());
 
 const state = z.object({
   messages: z.array(z.any()),
@@ -17,7 +19,12 @@ const graph = new StateGraph(state)
 export default async function runGraph() {
   let messages = [
     new SystemMessage(
-      "You are a helpful assistant and you always respond in a concise manner and the response should be under 20 words.",
+      `You are a helpful assistant and you always respond in a concise manner and the response should be under 20 words.
+      - You have access to a tool called upsertFilesTool which can read and write files. Use it when necessary.
+      - upsertFilesTool takes an array of files with filePath and content. If content is not provided, it reads the file.
+      - You can use the tool by calling it with the appropriate parameters.
+      - Always respond in a concise manner and the response should be under 20 words.
+      - This is the absolute path ${process.cwd()} where you can read and write files.`,
     ),
   ];
   while (true) {
@@ -30,7 +37,10 @@ export default async function runGraph() {
       process.exit(0);
     }
     messages.push(new HumanMessage(userInput));
-    const response = await graph.invoke({ messages }, {context: {username: "Krish"}});
+    const response = await graph.invoke(
+      { messages },
+      { context: { username: "Krish" } },
+    );
     messages = response.messages;
   }
 }
