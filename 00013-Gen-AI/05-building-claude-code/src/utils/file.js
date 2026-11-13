@@ -40,6 +40,7 @@ export async function saveApiKey(apiKey) {
 export async function getApiKey() {
   const settings = await getSettingsFileContent();
   const apiKey = settings.apiKey || null;
+  console.log(apiKey)
   if (!apiKey) {
     return {
       error: "API key not found in settings.json. Please set your API key.",

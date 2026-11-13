@@ -1,3 +1,4 @@
+import runGraph from "./graph/graph.js";
 import { getApiKey, getSettingsFileContent, saveApiKey } from "./utils/file.js";
 import readline from "./utils/readline.js";
 
@@ -23,6 +24,9 @@ async function main() {
 
   const apiKey = response.apiKey;
   console.log("API key is valid:", apiKey);
+
+  await runGraph(); // Run the graph after validating the API key
+
   readline.close();
 }
 
