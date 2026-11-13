@@ -2,7 +2,7 @@ import { StateGraph, START, END } from "@langchain/langgraph";
 import * as z from "zod";
 import { LLMNode } from "./node.js";
 import readline from "../utils/readline.js";
-import { HumanMessage } from "langchain";
+import { HumanMessage, SystemMessage } from "langchain";
 
 const state = z.object({
   messages: z.array(z.any()),
@@ -15,6 +15,11 @@ const graph = new StateGraph(state)
   .compile();
 
 export default async function runGraph() {
+  let messages = [
+    new SystemMessage(
+      "You are a helpful assistant and you always respond in a concise manner and the response should be under 20 words.",
+    ),
+  ];
   while (true) {
     const userInput = await readline.question(
       "Enter your message (or type 'exit' to quit): ",
@@ -24,8 +29,8 @@ export default async function runGraph() {
       readline.close();
       process.exit(0);
     }
-    const response = await graph.invoke({
-      messages: [new HumanMessage(userInput)],
-    });
+    messages.push(new HumanMessage(userInput));
+    const response = await graph.invoke({ messages });
+    messages = response.messages;
   }
 }
