@@ -41,7 +41,7 @@ export default async function runGraph() {
       { messages },
       { context: { username: "Krish" } },
     );
-    console.log(response)
+    console.log(response);
     messages = response.messages;
   }
 }
