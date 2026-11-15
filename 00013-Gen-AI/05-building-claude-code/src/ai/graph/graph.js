@@ -1,10 +1,10 @@
 import { StateGraph, START, END } from "@langchain/langgraph";
 import * as z from "zod";
-import { LLMNode } from "./node.js";
+import { LLMNode, ToolNode } from "./node.js";
 import readline from "../../utils/readline.js";
 import { HumanMessage, SystemMessage } from "langchain";
 
-console.log(process.cwd());
+// console.log(process.cwd());
 
 const state = z.object({
   messages: z.array(z.any()),
@@ -12,8 +12,18 @@ const state = z.object({
 
 const graph = new StateGraph(state)
   .addNode("LLMNode", LLMNode)
+  .addNode("ToolNode", ToolNode)
   .addEdge(START, "LLMNode")
-  .addEdge("LLMNode", END)
+  .addConditionalEdges(
+    "LLMNode",
+    (state) => {
+      // Check if the last message has tool calls, if so, go to ToolNode, else end the graph.
+      const lastMessage = state.messages[state.messages.length - 1];
+      return lastMessage?.tool_calls?.length ? "ToolNode" : END;
+    },
+    ["ToolNode", "__end__"],
+  )
+  .addEdge("ToolNode", "LLMNode")
   .compile();
 
 export default async function runGraph() {
@@ -41,7 +51,10 @@ export default async function runGraph() {
       { messages },
       { context: { username: "Krish" } },
     );
-    console.log(response);
+    console.log(
+      "[AI]: ",
+      response.messages[response.messages.length - 1].content,
+    );
     messages = response.messages;
   }
 }
