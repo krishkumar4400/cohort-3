@@ -36,3 +36,19 @@ export const upsertFilesTool = tool(
         }),
     }
 );
+
+export const deleteFilesTool = tool(
+    async function({ filePaths }) {
+        await Promise.all(filePaths.map(async (filePath) => {
+            await fs.unlink(filePath);
+        }));
+        return { message: "Files deleted successfully." };
+    },
+    {
+        name: "deleteFilesTool",
+        description: "Tool for deleting files.",
+        schema: z.object({
+            filePaths: z.array(z.string()).describe("An array of absolute paths of the files to be deleted."),
+        }),
+    }
+);
