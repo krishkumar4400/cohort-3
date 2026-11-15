@@ -1,0 +1,2599 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>RAG, Chunking &amp; Reranking</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Fraunces:ital,wght@0,300;0,600;0,700;0,900;1,300&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+/* Layout: 260px sticky ink sidebar + paper reading column (max 880px). Every idea gets a Back/Forward stage. */
+:root{
+  --ink:#0E0F14; --paper:#F5F2EB; --paper2:#EDE9DF; --paper3:#E4DFD3; --rule:#D4CEBC; --muted:#6B6455;
+  --accent:#C84B1F; --accent2:#1A6B4A; --accent3:#1B4587; --gold:#B8860B;
+  --code-bg:#1A1C24; --code-head:#13141A; --code-text:#E2DCCC; --flag-c:#5BA4CF; --val-c:#F4A261;
+  --tok-cmd:#87CEEB; --tok-str:#98C379; --tok-key:#C678DD; --tok-op:#E5C07B; --tok-com:rgba(255,255,255,.34);
+  --text:#2A2720;
+  --note-bg:#FEF9EC; --note-line:#EDD97A; --note-text:#5C4A00; --note-strong:#3D3000;
+  --warn-bg:#FEF2F2; --warn-line:#FCA5A5; --warn-text:#7F1D1D;
+  --white:#FFFFFF; --on-ink-1:rgba(255,255,255,.88); --on-ink-2:rgba(255,255,255,.6); --on-ink-3:rgba(255,255,255,.36);
+  --on-ink-line:rgba(255,255,255,.12); --on-ink-fill:rgba(255,255,255,.05);
+  --ok-on-ink:#4FBF8A; --bad-on-ink:#F08A62;
+  --c5:#7A3E9D; --c6:#2D7F8C;
+  --f-display:'Fraunces', Georgia, 'Times New Roman', serif;
+  --f-body:'DM Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --f-mono:'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+
+/* ── Reset & base ── */
+*,*::before,*::after{box-sizing:border-box}
+[hidden]{display:none!important}
+html{scroll-behavior:smooth}
+body{background-color:var(--paper);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.7;margin:0}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:40;background:var(--ink)}
+p{font-size:14.5px;color:var(--text);line-height:1.7;margin:0 0 12px;max-width:68ch}
+strong,b{font-weight:500;color:var(--ink)}
+a{color:var(--accent3)}
+h3{font-family:var(--f-display);font-size:18px;font-weight:600;color:var(--ink);margin:28px 0 12px;text-wrap:balance}
+h4{font-family:var(--f-mono);font-size:12px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin:0 0 10px}
+code.inline-code,p code,li code,td code{font-family:var(--f-mono);font-size:12px;color:var(--accent);background:var(--paper3);border:1px solid var(--rule);border-radius:4px;padding:1px 4px}
+ul.plain{margin:0 0 12px;padding-left:20px;max-width:68ch}
+ul.plain li{font-size:14.5px;color:var(--text);margin-bottom:6px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ── Keyframes (design system + extras) ── */
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+@keyframes slideInLeft{from{opacity:0;transform:translateX(-40px)}to{opacity:1;transform:translateX(0)}}
+@keyframes slideInRight{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:translateX(0)}}
+@keyframes floatPulse{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes dataFlow{from{stroke-dashoffset:200}to{stroke-dashoffset:0}}
+@keyframes flowX{from{background-position:0 0}to{background-position:14px 0}}
+@keyframes flowY{from{background-position:0 0}to{background-position:0 14px}}
+@keyframes blink{0%,80%,100%{opacity:.25}40%{opacity:1}}
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}
+@keyframes pop{0%{transform:scale(.6);opacity:0}70%{transform:scale(1.08);opacity:1}100%{transform:scale(1)}}
+@keyframes ringPulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 45%,transparent)}100%{box-shadow:0 0 0 10px transparent}}
+@keyframes dotsOut{to{opacity:0;visibility:hidden}}
+@keyframes textIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@keyframes drawLine{from{stroke-dashoffset:300}to{stroke-dashoffset:0}}
+@keyframes wobble{0%,100%{transform:rotate(0)}25%{transform:rotate(-4deg)}75%{transform:rotate(4deg)}}
+.animate-fade-up{animation:fadeUp .4s ease both}
+.animate-slide-left{animation:slideInLeft .5s ease both}
+.animate-slide-right{animation:slideInRight .5s ease both}
+.animate-float-pulse{animation:floatPulse 2.5s ease-in-out infinite}
+.animate-data-flow{animation:dataFlow 1.5s linear infinite}
+
+/* ── Layout ── */
+.layout-container{display:flex;min-height:100vh}
+.sidebar{width:260px;flex-shrink:0;background-color:var(--ink);position:sticky;top:0;height:100vh;overflow-y:auto;padding:32px 0 40px;z-index:20}
+.main-content{flex:1;min-width:0;max-width:calc(100% - 260px);padding:56px 56px 80px}
+.main-inner{max-width:880px}
+
+/* ── Sidebar ── */
+.nav-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.nav-brand{padding:0 24px;margin-bottom:24px}
+.nav-brand .logo{font-family:var(--f-display);font-size:18px;font-weight:700;color:var(--white)}
+.nav-brand .logo .accent-dot{color:var(--accent)}
+.nav-brand .sub{font-family:var(--f-mono);font-size:10px;color:rgba(255,255,255,.35);letter-spacing:.06em;margin-top:2px}
+.nav-toggle{display:none;font-family:var(--f-mono);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--white);background:transparent;border:1px solid var(--on-ink-line);border-radius:6px;padding:6px 12px;cursor:pointer}
+.nav-group-label{font-family:var(--f-mono);font-size:9px;color:rgba(255,255,255,.25);letter-spacing:.12em;text-transform:uppercase;padding:0 24px;margin-top:16px;margin-bottom:4px}
+.nav-link{display:flex;align-items:center;gap:8px;padding:10px 24px;font-family:var(--f-body);font-size:12.5px;color:rgba(255,255,255,.5);border-left:2px solid transparent;text-decoration:none;transition:color 150ms ease,background-color 150ms ease}
+.nav-link:hover{color:var(--white);background-color:rgba(255,255,255,.04)}
+.nav-link.active{color:var(--white);border-left-color:var(--accent);background-color:rgba(200,75,31,.08)}
+.nav-num{width:18px;height:18px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background-color:rgba(255,255,255,.08);font-family:var(--f-mono);font-size:9px;border-radius:4px;color:inherit;transition:background-color 150ms ease}
+.nav-link:hover .nav-num,.nav-link.active .nav-num{background-color:var(--accent);color:var(--white)}
+.nav-progress{margin:28px 24px 0;height:3px;border-radius:2px;background:var(--on-ink-line);overflow:hidden}
+.nav-progress span{display:block;height:100%;width:0;background:var(--accent);transition:width 120ms linear}
+.nav-foot{font-family:var(--f-mono);font-size:10px;color:var(--on-ink-3);padding:10px 24px 0;letter-spacing:.04em}
+
+/* ── Hero ── */
+.hero{margin-bottom:64px;padding-bottom:40px;border-bottom:1px solid var(--rule);display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:40px;align-items:end}
+.hero-eyebrow{font-family:var(--f-mono);font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:.12em;margin-bottom:14px}
+.hero h1{font-family:var(--f-display);font-size:clamp(36px,5vw,58px);font-weight:900;color:var(--ink);line-height:1.05;letter-spacing:-.02em;margin:0 0 18px;text-wrap:balance}
+.hero h1 em{font-style:normal;color:var(--accent)}
+.hero-desc{font-size:16px;color:var(--muted);max-width:560px;line-height:1.65;margin-bottom:20px}
+.hero-tags{display:flex;flex-wrap:wrap;gap:8px}
+.hero-tag{font-family:var(--f-mono);font-size:11px;color:var(--muted);border:1px solid var(--rule);border-radius:9999px;padding:2px 12px}
+.acro{display:flex;flex-direction:column;gap:14px}
+.acro-row{display:flex;gap:14px;align-items:flex-start;animation:slideInRight .6s ease both;animation-delay:var(--d)}
+.acro-letter{font-family:var(--f-display);font-size:44px;font-weight:900;line-height:.9;color:var(--accent);width:40px;flex-shrink:0;animation:pop .6s ease both;animation-delay:calc(var(--d) + .15s)}
+.acro-word{font-family:var(--f-display);font-size:18px;font-weight:600;line-height:1.2}
+.acro-desc{font-size:13px;color:var(--muted);line-height:1.5}
+
+/* ── Sections ── */
+.section-block{margin-bottom:72px;scroll-margin-top:24px}
+.section-header{display:flex;align-items:flex-start;gap:16px;margin-bottom:28px}
+.section-header-text{padding-top:4px}
+.section-num-big{font-family:var(--f-display);font-size:48px;font-weight:900;color:var(--rule);user-select:none;line-height:1}
+.section-title{font-family:var(--f-display);font-size:26px;font-weight:700;color:var(--ink);line-height:1.2;text-wrap:balance}
+.section-subtitle{font-size:13px;color:var(--muted);margin-top:4px}
+
+/* ── Boxes ── */
+.concept-box{background-color:var(--paper2);border-left:3px solid var(--accent3);border-radius:0 8px 8px 0;padding:16px 20px;margin:16px 0}
+.concept-box-label{font-family:var(--f-mono);font-size:9px;color:var(--accent3);text-transform:uppercase;letter-spacing:.12em;margin-bottom:8px}
+.concept-box-text{font-size:14px;color:var(--ink);line-height:1.65;margin:0}
+.concept-box ul{margin:6px 0 0;padding-left:18px}
+.concept-box li{font-size:14px;line-height:1.6;margin-bottom:6px;color:var(--ink)}
+.note-box{background-color:var(--note-bg);border:1px solid var(--note-line);border-radius:8px;padding:12px 16px;margin:16px 0;display:flex;gap:12px;align-items:flex-start}
+.note-box-icon{font-size:18px;line-height:1;margin-top:2px}
+.note-box-text{font-size:13px;color:var(--note-text);margin:0}
+.note-box-text strong{color:var(--note-strong)}
+.warning-box{background-color:var(--warn-bg);border:1px solid var(--warn-line);border-radius:8px;padding:12px 16px;margin:16px 0;display:flex;gap:12px;align-items:flex-start}
+.warning-box-icon{font-size:18px;line-height:1;margin-top:2px}
+.warning-box-text{font-size:13px;color:var(--warn-text);margin:0}
+.warning-box-text strong{color:var(--warn-text)}
+.badge{display:inline-block;font-family:var(--f-mono);font-size:10px;font-weight:600;color:var(--white);text-transform:uppercase;letter-spacing:.06em;padding:2px 10px;border-radius:4px}
+.badge-accent{background-color:var(--accent)}.badge-green{background-color:var(--accent2)}.badge-blue{background-color:var(--accent3)}.badge-gold{background-color:var(--gold)}
+.divider{border:none;border-top:1px solid var(--rule);margin:40px 0}
+
+/* ── Code ── */
+.code-block{border-radius:8px;overflow:hidden;border:1px solid rgba(255,255,255,.06);margin:16px 0;background:var(--code-bg)}
+.code-header{display:flex;align-items:center;justify-content:space-between;padding:8px 16px;background-color:var(--code-head);border-bottom:1px solid rgba(255,255,255,.06)}
+.code-label{font-family:var(--f-mono);font-size:10px;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.08em}
+.code-copy-btn{background:none;border:none;font-family:var(--f-mono);font-size:10px;color:rgba(255,255,255,.3);text-transform:uppercase;letter-spacing:.06em;cursor:pointer;transition:color 150ms ease}
+.code-copy-btn:hover{color:rgba(255,255,255,.7)}
+.code-pre{background-color:var(--code-bg);color:var(--code-text);font-family:var(--f-mono);font-size:12.5px;line-height:1.75;padding:16px 20px;overflow-x:auto;margin:0;tab-size:2}
+.token-command{color:var(--tok-cmd);font-weight:bold}.token-flag{color:var(--flag-c)}.token-val{color:var(--val-c)}
+.token-string{color:var(--tok-str)}.token-comment{color:var(--tok-com);font-style:italic}.token-yaml-key{color:var(--tok-key)}.token-operator{color:var(--tok-op)}
+
+/* ── Tables ── */
+.table-wrap{overflow-x:auto;margin:16px 0}
+.compare-table,.flag-table{width:100%;border-collapse:collapse;font-size:14px;min-width:560px}
+.compare-table th{background-color:var(--ink);color:var(--white);font-size:13px;font-weight:500;text-align:left;padding:12px 16px;border:1px solid var(--ink)}
+.compare-table td{font-size:13px;padding:12px 16px;border:1px solid var(--rule);vertical-align:top}
+.compare-table tbody tr,.flag-table tbody tr{transition:background-color 100ms ease}
+.compare-table tbody tr:hover,.flag-table tbody tr:hover{background-color:var(--paper2)}
+.compare-table .cell-title{font-weight:500;color:var(--ink)}
+.compare-table .cell-muted{color:var(--muted)}
+.compare-table .cell-highlight{color:var(--accent2);font-weight:500}
+.flag-table th{font-family:var(--f-mono);font-size:10px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;background-color:var(--paper3);text-align:left;padding:8px 12px;border:1px solid var(--rule)}
+.flag-table td{padding:8px 12px;border:1px solid var(--rule);font-size:13.5px}
+.flag-name{font-family:var(--f-mono);font-size:12px;font-weight:600;color:var(--accent3)}
+.flag-val{font-family:var(--f-mono);font-size:12px;color:var(--accent);font-variant-numeric:tabular-nums}
+
+/* ── Flow & scale diagrams ── */
+.flow-diagram{display:flex;flex-direction:column;margin:16px 0}
+.flow-step{display:flex;gap:16px;animation:slideInLeft .5s ease both;animation-delay:calc(var(--i,0) * .08s)}
+.flow-connector{display:flex;flex-direction:column;align-items:center}
+.flow-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;margin-top:6px}
+.flow-dot-accent{background-color:var(--accent)}.flow-dot-green{background-color:var(--accent2)}.flow-dot-blue{background-color:var(--accent3)}
+.flow-line{width:2px;background-color:var(--rule);flex:1;margin:4px 0}
+.flow-content{padding-bottom:16px;min-width:0}
+.flow-title{font-size:14px;font-weight:500;color:var(--ink)}
+.flow-desc{font-size:12.5px;color:var(--muted);margin-top:2px}
+.scale-diagram{background-color:var(--paper2);border:1px solid var(--rule);border-radius:10px;padding:16px 20px;margin:16px 0;font-family:var(--f-mono);font-size:12px;line-height:2;color:var(--muted);overflow-x:auto}
+.scale-diagram .highlight{color:var(--ink);font-weight:bold}.scale-diagram .green{color:var(--accent2)}.scale-diagram .red{color:var(--accent)}
+
+/* ── Quiz ── */
+.quiz-box{background-color:var(--ink);border-radius:12px;padding:24px;margin:32px 0;border:1px solid rgba(255,255,255,.08)}
+.quiz-label{font-family:var(--f-mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:10px}
+.quiz-question{font-size:15px;color:var(--white);font-weight:500;line-height:1.6;margin-bottom:20px;max-width:none}
+.quiz-options{display:flex;flex-direction:column;gap:12px}
+.quiz-option{text-align:left;font-family:var(--f-body);font-size:13.5px;color:rgba(255,255,255,.7);background:transparent;border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:12px 16px;cursor:pointer;transition:all 200ms ease}
+.quiz-option:hover:not(:disabled){border-color:var(--accent);color:var(--white);background-color:rgba(200,75,31,.08)}
+.quiz-option:disabled{cursor:not-allowed}
+.quiz-option.correct{border-color:var(--accent2)!important;background-color:rgba(26,107,74,.15)!important;color:var(--white)!important;opacity:1!important}
+.quiz-option.incorrect{border-color:var(--accent)!important;background-color:rgba(200,75,31,.15)!important;color:var(--white)!important;opacity:1!important;animation:shake .4s ease}
+.quiz-feedback{margin-top:16px;font-family:var(--f-mono);font-size:11px;text-transform:uppercase;letter-spacing:.08em}
+.quiz-feedback.correct{color:var(--ok-on-ink)}.quiz-feedback.incorrect{color:var(--bad-on-ink)}.quiz-feedback.hidden{display:none}
+
+/* ── Footer ── */
+.site-footer{display:flex;flex-wrap:wrap;gap:8px 24px;align-items:center;justify-content:space-between;font-family:var(--f-mono);font-size:11px;color:var(--muted);border-top:2px solid var(--rule);padding-top:16px;margin-top:64px}
+
+/* ═════════ Stepper (Back / Forward step-through) ═════════ */
+.stepper{margin:24px 0;border:1px solid var(--rule);border-radius:12px;overflow:hidden;background:var(--paper2)}
+.stepper:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.stage{position:relative;padding:24px}
+.stepper-bar{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--ink)}
+.step-btn{font-family:var(--f-mono);font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--white);background:transparent;border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:7px 12px;cursor:pointer;white-space:nowrap;transition:border-color .15s,background-color .15s,opacity .15s}
+.step-btn:hover:not(:disabled){border-color:var(--accent);background:rgba(200,75,31,.12)}
+.step-btn.step-next{background:var(--accent);border-color:var(--accent)}
+.step-btn.step-next:hover:not(:disabled){background:#B0421B}
+.step-btn:disabled{opacity:.3;cursor:not-allowed}
+.stepper-mid{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
+.stepper-caption{font-size:13px;color:var(--on-ink-1);line-height:1.5}
+.stepper-caption strong{color:var(--white);font-weight:500}
+.stepper-caption.swap{animation:fadeUp .35s ease both}
+.step-dots{display:flex;gap:4px}
+.step-dot{height:3px;flex:1;max-width:28px;border-radius:2px;background:var(--on-ink-line);transition:background-color .3s}
+.step-dot.done{background:var(--accent)}
+.step-count{font-family:var(--f-mono);font-size:11px;color:var(--on-ink-3);font-variant-numeric:tabular-nums;white-space:nowrap}
+.stepper-hint{font-family:var(--f-mono);font-size:10px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;padding:0 0 6px}
+@media (max-width:640px){
+  .stepper-bar{flex-wrap:wrap}
+  .stepper-mid{order:-1;flex-basis:100%}
+  .step-count{margin:0 auto}
+  .stage{padding:16px}
+}
+
+/* reveal states driven by data-on */
+.st{opacity:0;transform:translateY(10px);transition:opacity .45s ease,transform .45s ease;pointer-events:none}
+.st.from-left{transform:translateX(-24px)}
+.st.from-right{transform:translateX(24px)}
+.st.pop-in{transform:scale(.9)}
+.st.is-on{opacity:1;transform:none;pointer-events:auto}
+.sf{opacity:0;transition:opacity .5s ease}
+.sf.is-on{opacity:1}
+.stack{display:grid}
+.stack>*{grid-area:1/1;min-width:0}
+
+/* chips */
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:var(--f-mono);font-size:10.5px;letter-spacing:.04em;border-radius:999px;padding:2px 10px;border:1px solid var(--rule);background:var(--paper);color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.chip-red{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 40%,var(--rule));background:color-mix(in srgb,var(--accent) 7%,var(--paper))}
+.chip-green{color:var(--accent2);border-color:color-mix(in srgb,var(--accent2) 40%,var(--rule));background:color-mix(in srgb,var(--accent2) 8%,var(--paper))}
+.chip-blue{color:var(--accent3);border-color:color-mix(in srgb,var(--accent3) 40%,var(--rule));background:color-mix(in srgb,var(--accent3) 7%,var(--paper))}
+.chip-gold{color:var(--gold);border-color:color-mix(in srgb,var(--gold) 45%,var(--rule));background:color-mix(in srgb,var(--gold) 8%,var(--paper))}
+.mono{font-family:var(--f-mono)}
+.dots{display:inline-flex;gap:4px;align-items:center}
+.dots i{width:6px;height:6px;border-radius:50%;background:var(--muted);animation:blink 1s infinite}
+.dots i:nth-child(2){animation-delay:.15s}.dots i:nth-child(3){animation-delay:.3s}
+
+/* ═════════ 01 Chat simulation ═════════ */
+.chat-stage{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:20px;align-items:start}
+.chat-phone{background:var(--paper);border:1px solid var(--rule);border-radius:14px;overflow:hidden}
+.chat-head{display:flex;gap:10px;align-items:center;padding:10px 14px;background:var(--ink);color:var(--white)}
+.chat-avatar{width:30px;height:30px;border-radius:50%;background:var(--accent);display:grid;place-items:center;font-family:var(--f-mono);font-size:11px;font-weight:600;flex-shrink:0}
+.chat-name{font-size:13px;font-weight:500;line-height:1.2}
+.chat-status{font-family:var(--f-mono);font-size:10px;color:var(--on-ink-2)}
+.chat-body{padding:16px;display:flex;flex-direction:column;gap:12px;min-height:290px}
+.bubble{padding:10px 14px;border-radius:14px;font-size:13.5px;line-height:1.55;position:relative}
+.bubble.user{align-self:flex-end;max-width:86%;background:var(--ink);color:var(--white);border-bottom-right-radius:4px}
+.bot-slot{display:grid;align-self:flex-start;max-width:90%}
+.bot-slot>.bubble{grid-area:1/1}
+.bubble.bot{background:var(--paper2);border:1px solid var(--rule);border-bottom-left-radius:4px;color:var(--ink)}
+.bubble.bot.bad{border-color:var(--gold)}
+.bubble.bot.good{border-color:var(--accent2)}
+.bubble-tag{display:block;font-family:var(--f-mono);font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}
+.bad .bubble-tag{color:var(--gold)}.good .bubble-tag{color:var(--accent2)}
+.bubble .b-dots{position:absolute;left:14px;bottom:12px}
+.bubble.bot .b-text{opacity:0}
+.bubble.bot.is-on .b-dots{animation:dotsOut .2s .85s forwards}
+.bubble.bot.is-on .b-text{animation:textIn .4s .9s forwards}
+.know-panel h4{margin-bottom:12px}
+.know-rows{display:flex;flex-direction:column;gap:8px}
+.know-row{background:var(--paper);border:1px solid var(--rule);border-radius:8px;padding:9px 12px;transition:border-color .4s,box-shadow .4s}
+.know-key{font-family:var(--f-mono);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.know-val{display:grid;margin-top:2px}
+.know-val>*{grid-area:1/1}
+.kv-unknown{font-family:var(--f-mono);color:var(--accent);font-size:14px;letter-spacing:.25em}
+.kv-known{font-size:13px;color:var(--ink);line-height:1.45}
+#st-chat[data-step="4"] .know-row{border-color:var(--accent2);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent2) 14%,transparent)}
+.reality{border:1px dashed var(--accent);border-radius:10px;padding:14px;background:var(--warn-bg)}
+.reality h4{color:var(--accent)}
+.reality ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.reality li{font-size:13px;color:var(--warn-text);line-height:1.45;display:flex;gap:8px}
+.reality li b{color:var(--warn-text)}
+.reality li .x{font-family:var(--f-mono);font-weight:600;color:var(--accent);flex-shrink:0}
+.reality-cost{margin-top:12px;padding-top:10px;border-top:1px solid var(--warn-line);font-family:var(--f-mono);font-size:11.5px;color:var(--warn-text)}
+.is-on .reality li{animation:slideInRight .45s ease both}
+.is-on .reality li:nth-child(2){animation-delay:.12s}.is-on .reality li:nth-child(3){animation-delay:.24s}
+
+/* ═════════ 02 Context stuffing ═════════ */
+.ctx-meter{margin-bottom:16px}
+.ctx-top{display:flex;justify-content:space-between;gap:12px;font-family:var(--f-mono);font-size:11px;color:var(--muted);margin-bottom:6px;flex-wrap:wrap}
+.ctx-top b{color:var(--ink);font-weight:500;font-variant-numeric:tabular-nums}
+.ctx-track{position:relative;height:16px;border-radius:8px;background:var(--paper);border:1px solid var(--rule);overflow:hidden}
+.ctx-fill{height:100%;width:0;background:var(--accent3);border-radius:8px;transition:width .8s cubic-bezier(.2,.8,.2,1),background-color .4s}
+.ctx-meter.warn .ctx-fill{background:var(--gold)}
+.ctx-meter.over .ctx-fill{background:repeating-linear-gradient(135deg,var(--accent) 0 8px,color-mix(in srgb,var(--accent) 70%,var(--paper)) 8px 16px)}
+.ctx-meter.over .ctx-track{animation:shake .5s ease}
+.ctx-meter.over .ctx-top b{color:var(--accent)}
+.prompt-box{border:1px solid var(--rule);border-radius:10px;background:var(--paper);padding:12px;display:flex;flex-direction:column;gap:10px}
+.prompt-line{font-family:var(--f-mono);font-size:11.5px;color:var(--muted);line-height:1.5}
+.prompt-line b{color:var(--accent3);font-weight:600}
+.doc-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+.doc{border:1px dashed var(--rule);border-radius:8px;padding:10px;background:var(--paper2);opacity:.45;transform:translateY(-6px);transition:all .5s cubic-bezier(.2,.8,.2,1)}
+.doc.in{opacity:1;transform:none;border-style:solid;border-color:var(--accent3);background:color-mix(in srgb,var(--accent3) 6%,var(--paper))}
+.doc[data-k="3"].in{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 7%,var(--paper))}
+.doc-ico{font-family:var(--f-mono);font-size:9px;font-weight:600;color:var(--white);background:var(--accent);display:inline-block;border-radius:3px;padding:1px 5px;margin-bottom:6px}
+.doc-name{font-size:12px;font-weight:500;line-height:1.3;color:var(--ink)}
+.doc-meta{font-family:var(--f-mono);font-size:10px;color:var(--muted);margin-top:4px}
+.lim-title{font-size:14px;font-weight:500;margin-bottom:14px}
+.lim-pages{display:grid;grid-template-columns:repeat(24,minmax(0,1fr));gap:4px;align-items:end;height:110px;padding-top:26px}
+.lim-page{position:relative;height:80px;border-radius:3px;background:var(--accent3);opacity:var(--o)}
+.is-on .lim-page{animation:fadeUp .4s ease both;animation-delay:calc(var(--i) * .03s)}
+.lim-page.hot{background:var(--accent);opacity:.35;outline:2px solid var(--accent);outline-offset:1px}
+.lim-pin{position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);font-family:var(--f-mono);font-size:10px;color:var(--white);background:var(--accent);border-radius:4px;padding:1px 6px;white-space:nowrap}
+.lim-axis{display:flex;justify-content:space-between;font-family:var(--f-mono);font-size:10px;color:var(--muted);margin-top:8px}
+.lim-note{font-size:13px;color:var(--muted);margin-top:14px}
+.mult{display:flex;flex-direction:column;gap:6px;max-width:560px}
+.mult-row{display:grid;grid-template-columns:28px minmax(0,auto) 1fr;gap:12px;align-items:baseline;padding:8px 0;border-bottom:1px dashed var(--rule)}
+.is-on .mult-row{animation:fadeUp .45s ease both;animation-delay:var(--d)}
+.mult-op{font-family:var(--f-mono);font-size:18px;color:var(--accent);text-align:center}
+.mult-num{font-family:var(--f-display);font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.mult-lbl{font-size:13px;color:var(--muted)}
+.mult-row.total{border-bottom:none}
+.mult-row.total .mult-num{color:var(--accent);font-size:32px}
+.prob-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:16px 0}
+.prob{border:1px solid var(--rule);border-radius:10px;padding:14px 16px;background:var(--paper);transition:transform .2s ease,border-color .2s ease;animation:fadeUp .45s ease both;animation-delay:calc(var(--i) * .06s)}
+.prob:hover{transform:translateY(-3px);border-color:var(--accent)}
+.prob-tag{font-family:var(--f-mono);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--accent);margin-bottom:6px}
+.prob p{font-size:13px;margin:0;line-height:1.55}
+
+/* calculator */
+.calc{border:1px solid var(--rule);border-radius:12px;background:var(--paper2);padding:20px;margin:16px 0}
+.calc-controls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-bottom:20px}
+.ctl{display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--muted)}
+.ctl output{font-family:var(--f-mono);color:var(--ink);font-weight:500;font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:var(--accent);margin:0}
+.calc-row{display:grid;grid-template-columns:150px minmax(0,1fr) 150px;gap:14px;align-items:center;margin-bottom:12px}
+.calc-label{font-size:13px;font-weight:500;line-height:1.3}
+.calc-label span{display:block;font-family:var(--f-mono);font-size:10px;color:var(--muted);font-weight:400}
+.calc-track{height:22px;border-radius:6px;background:var(--paper);border:1px solid var(--rule);overflow:hidden}
+.calc-fill{height:100%;width:0;border-radius:6px;transition:width .5s cubic-bezier(.2,.8,.2,1)}
+.fill-bad{background:var(--accent)}.fill-good{background:var(--accent2)}
+.calc-val{font-family:var(--f-mono);font-size:13px;font-weight:500;font-variant-numeric:tabular-nums;text-align:right}
+.calc-val small{display:block;font-size:10.5px;color:var(--muted);font-weight:400}
+.calc-verdict{font-size:13.5px;color:var(--ink);margin:12px 0 0;padding-top:12px;border-top:1px solid var(--rule);max-width:none}
+.calc-foot{font-family:var(--f-mono);font-size:10px;color:var(--muted);margin-top:8px}
+
+/* keyword vs meaning */
+.kw-query{display:flex;flex-wrap:wrap;gap:10px;align-items:baseline;padding:12px 14px;background:var(--ink);color:var(--white);border-radius:10px;margin-bottom:10px}
+.kw-label{font-family:var(--f-mono);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--on-ink-2)}
+.kw-q{font-size:15px}
+.qw{transition:all .3s}
+#st-kw[data-step="1"] .qw.key{color:var(--val-c);text-decoration:underline wavy var(--accent);text-underline-offset:4px}
+.kw-vec{font-family:var(--f-mono);font-size:12px;color:var(--accent3);background:var(--paper);border:1px solid var(--rule);border-radius:8px;padding:8px 12px;margin-bottom:10px;overflow-x:auto;white-space:nowrap}
+.kw-vec .muted{color:var(--muted)}
+.kw-list{display:flex;flex-direction:column;gap:8px}
+.kw-item{display:grid;grid-template-columns:76px minmax(0,1fr) 200px;gap:12px;align-items:center;background:var(--paper);border:1px solid var(--rule);border-radius:8px;padding:10px 12px;transition:border-color .4s,box-shadow .4s}
+#st-kw[data-step="2"] .kw-item.best,#st-kw[data-step="3"] .kw-item.best{border-color:var(--accent2);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent2) 14%,transparent)}
+.kw-sec{font-family:var(--f-mono);font-size:11px;font-weight:600;color:var(--accent3)}
+.kw-text{font-size:13px;line-height:1.45;color:var(--ink)}
+.kw-meta{display:grid;justify-items:end}
+.kw-meta>*{grid-area:1/1}
+.sim{display:flex;align-items:center;gap:8px;width:100%}
+.sim-track{flex:1;height:8px;border-radius:4px;background:var(--paper3);overflow:hidden}
+.sim-fill{height:100%;width:0;background:var(--accent2);border-radius:4px;transition:width .9s cubic-bezier(.2,.8,.2,1)}
+.sim.is-on .sim-fill{width:var(--w)}
+.sim-num{font-family:var(--f-mono);font-size:11.5px;font-variant-numeric:tabular-nums;width:34px;text-align:right}
+.kw-verdict{margin-top:12px;font-size:13.5px;color:var(--accent)}
+
+/* ═════════ 03 Embedding space ═════════ */
+.space-stage{padding:0;background:var(--paper2)}
+#space-canvas{display:block;width:100%;height:420px;cursor:grab;touch-action:pan-y}
+#space-canvas:active{cursor:grabbing}
+.space-hint{position:absolute;top:12px;right:14px;font-family:var(--f-mono);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);background:var(--paper);border:1px solid var(--rule);border-radius:999px;padding:3px 10px}
+.dim-counter{position:absolute;left:16px;bottom:16px;background:var(--ink);color:var(--white);border-radius:10px;padding:10px 14px;display:flex;align-items:baseline;gap:10px}
+.dim-counter b{font-family:var(--f-display);font-size:34px;font-weight:900;color:var(--val-c);font-variant-numeric:tabular-nums;line-height:1}
+.dim-counter span{font-family:var(--f-mono);font-size:11px;color:var(--on-ink-2)}
+.svg-scroll{overflow-x:auto}
+.svg-scroll svg{display:block;min-width:560px;width:100%;height:auto}
+.map-cluster{fill:var(--paper);stroke:var(--rule);stroke-width:1}
+.map-cl-label{font-family:var(--f-mono);font-size:10px;letter-spacing:.1em;fill:var(--muted);text-anchor:middle}
+.map-pt{fill:var(--accent3)}
+.map-label{font-family:var(--f-body);font-size:12px;fill:var(--ink)}
+.q-dot{transition:transform 1s cubic-bezier(.2,.8,.2,1),opacity .4s}
+.q-dot circle{fill:var(--accent)}
+.q-dot text{font-family:var(--f-mono);font-size:11px;fill:var(--accent);font-weight:600;text-anchor:middle}
+.nn-line{stroke:var(--accent);stroke-width:1.5;stroke-dasharray:4 4}
+.nn-ring{fill:none;stroke:var(--accent);stroke-width:1;stroke-dasharray:3 5}
+.map-pt.near{transition:r .4s}
+#st-map[data-step="2"] .map-pt.near,#st-map[data-step="3"] .map-pt.near{fill:var(--accent)}
+.tray{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:12px}
+.tray-item{background:var(--paper);border:1px solid var(--accent);border-radius:8px;padding:10px 12px;font-size:12.5px;line-height:1.45}
+.tray-item span{display:block;font-family:var(--f-mono);font-size:10px;color:var(--accent);margin-bottom:4px}
+.tray-item.st:nth-child(2){transition-delay:.1s}.tray-item.st:nth-child(3){transition-delay:.2s}
+.cos-wrap{display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:20px;align-items:center;border:1px solid var(--rule);border-radius:12px;background:var(--paper2);padding:20px;margin:16px 0}
+.cos-wrap svg{width:100%;height:auto;display:block}
+.cos-vec{stroke-width:3;stroke-linecap:round}
+.cos-a{stroke:var(--accent3)}.cos-b{stroke:var(--accent)}
+.cos-arc{fill:none;stroke:var(--gold);stroke-width:2}
+.cos-lbl{font-family:var(--f-mono);font-size:11px}
+.cos-big{font-family:var(--f-display);font-size:44px;font-weight:900;line-height:1;font-variant-numeric:tabular-nums;color:var(--ink)}
+.cos-mean{font-family:var(--f-mono);font-size:11px;text-transform:uppercase;letter-spacing:.08em;margin:6px 0 14px}
+.cos-pair{font-size:13px;color:var(--muted);line-height:1.5}
+.cos-pair b{color:var(--ink)}
+
+/* ═════════ 04 Pipelines ═════════ */
+.pipe{display:flex;align-items:center;gap:0;margin-bottom:20px}
+.pipe-node{flex:0 0 auto;width:118px;border:1px solid var(--rule);border-radius:10px;background:var(--paper);padding:10px;display:flex;flex-direction:column;gap:2px;transition:background-color .4s,border-color .4s,color .4s,transform .4s}
+.pipe-node .pn-num{font-family:var(--f-mono);font-size:9.5px;color:var(--muted);letter-spacing:.08em}
+.pipe-node .pn-title{font-size:13.5px;font-weight:500;line-height:1.25}
+.pipe-node .pn-sub{font-family:var(--f-mono);font-size:10px;color:var(--muted);line-height:1.35}
+.pipe-node.lit{background:var(--ink);border-color:var(--ink);color:var(--white)}
+.pipe-node.lit .pn-num,.pipe-node.lit .pn-sub{color:var(--on-ink-2)}
+.pipe-node.current{border-color:var(--accent);animation:floatPulse 2.5s ease-in-out infinite,ringPulse 1.6s ease-out infinite}
+.pipe-link{position:relative;flex:1 1 14px;min-width:14px;height:2px;background:var(--rule);overflow:hidden}
+.pipe-link::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(90deg,var(--accent) 0 6px,transparent 6px 14px);opacity:0;transition:opacity .3s}
+.pipe-link.flow::after{opacity:1;animation:flowX .7s linear infinite}
+.pipe.six .pipe-node{width:104px}
+.pipe-detail{background:var(--paper);border:1px solid var(--rule);border-radius:10px;padding:16px}
+.pd-title{font-family:var(--f-mono);font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--accent);margin-bottom:8px}
+.pipe-detail p{font-size:13.5px;margin-bottom:8px}
+.mini-code{font-family:var(--f-mono);font-size:12px;line-height:1.7;background:var(--code-bg);color:var(--code-text);border-radius:8px;padding:12px 14px;overflow-x:auto;white-space:pre;margin:8px 0 0}
+.mini-code .k{color:var(--tok-key)}.mini-code .s{color:var(--tok-str)}.mini-code .n{color:var(--val-c)}.mini-code .c{color:var(--tok-com)}
+.file-row{display:flex;flex-wrap:wrap;gap:8px}
+.chunk-chips{display:flex;flex-direction:column;gap:6px}
+.chunk-chip{font-size:12.5px;border:1px solid var(--rule);border-left:3px solid var(--accent3);border-radius:6px;padding:6px 10px;background:var(--paper2);line-height:1.45}
+.chunk-chip span{font-family:var(--f-mono);font-size:10px;color:var(--muted);margin-right:8px}
+.is-on .chunk-chip{animation:slideInLeft .45s ease both}
+.is-on .chunk-chip:nth-child(2){animation-delay:.1s}.is-on .chunk-chip:nth-child(3){animation-delay:.2s}
+.embed-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.embed-arrow{font-family:var(--f-mono);color:var(--accent);font-size:16px}
+.vec-box{font-family:var(--f-mono);font-size:12px;color:var(--accent3);background:var(--paper2);border:1px solid var(--rule);border-radius:6px;padding:6px 10px;font-variant-numeric:tabular-nums}
+.prompt-preview{font-family:var(--f-mono);font-size:11.5px;line-height:1.65;border-radius:8px;overflow:hidden;border:1px solid var(--rule)}
+.pp-seg{padding:8px 12px;white-space:pre-wrap}
+.pp-sys{background:color-mix(in srgb,var(--accent3) 8%,var(--paper));color:var(--accent3)}
+.pp-ctx{background:color-mix(in srgb,var(--accent2) 9%,var(--paper));color:var(--accent2)}
+.pp-q{background:color-mix(in srgb,var(--accent) 8%,var(--paper));color:var(--accent)}
+.pp-tag{display:block;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;opacity:.8;margin-bottom:2px}
+.is-on .pp-seg{animation:slideInRight .45s ease both}
+.is-on .pp-seg:nth-child(2){animation-delay:.12s}.is-on .pp-seg:nth-child(3){animation-delay:.24s}
+.answer-bubble{background:var(--paper2);border:1px solid var(--accent2);border-radius:14px;border-bottom-left-radius:4px;padding:12px 14px;font-size:13.5px;max-width:560px}
+.answer-bubble .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.res-list{display:flex;flex-direction:column;gap:6px}
+.res{display:grid;grid-template-columns:28px minmax(0,1fr) 54px;gap:10px;align-items:center;border:1px solid var(--rule);border-radius:6px;padding:6px 10px;font-size:12.5px;background:var(--paper2)}
+.res b{font-family:var(--f-mono);font-size:11px;color:var(--accent2)}
+.res .sc{font-family:var(--f-mono);font-size:11px;text-align:right;font-variant-numeric:tabular-nums}
+.is-on .res{animation:fadeUp .4s ease both}
+.is-on .res:nth-child(2){animation-delay:.1s}.is-on .res:nth-child(3){animation-delay:.2s}
+
+/* ═════════ 05 Chunking ═════════ */
+.gl-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:20px;align-items:start}
+.doc-mock{position:relative;height:332px;background:var(--paper);border:1px solid var(--rule);border-radius:10px;overflow:hidden}
+.dm-line{position:absolute;left:16px;height:9px;border-radius:5px;background:var(--paper3)}
+.dm-line.head{background:var(--muted);height:11px}
+.dm-line.hot{background:color-mix(in srgb,var(--accent) 55%,var(--paper3))}
+.dm-win{position:absolute;left:8px;right:8px;border:2px solid var(--accent3);border-radius:8px;background:color-mix(in srgb,var(--accent3) 8%,transparent);transition:top .7s cubic-bezier(.2,.8,.2,1),height .7s cubic-bezier(.2,.8,.2,1),opacity .4s}
+.dm-win.b{border-color:var(--accent2);background:color-mix(in srgb,var(--accent2) 8%,transparent);left:14px;right:14px}
+.dm-win .w-lbl{position:absolute;top:-1px;right:-1px;font-family:var(--f-mono);font-size:9.5px;color:var(--white);background:var(--accent3);border-radius:0 6px 0 6px;padding:1px 6px}
+.dm-win.b .w-lbl{background:var(--accent2)}
+.gl-recv{background:var(--paper);border:1px solid var(--rule);border-radius:10px;padding:12px 14px;margin-bottom:14px;min-height:120px}
+.gl-lbl{font-family:var(--f-mono);font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:6px}
+.gl-recv p{font-size:13px;margin:0}
+.gl-recv .why{display:block;margin-top:6px;color:var(--accent);font-size:12.5px}
+.meter{display:grid;grid-template-columns:120px minmax(0,1fr) 40px;gap:10px;align-items:center;margin-bottom:10px;font-size:12.5px;color:var(--muted)}
+.m-track{height:10px;border-radius:5px;background:var(--paper3);overflow:hidden}
+.m-fill{height:100%;width:0;border-radius:5px;transition:width .7s cubic-bezier(.2,.8,.2,1)}
+.m-prec{background:var(--accent2)}.m-ctx{background:var(--accent3)}.m-tok{background:var(--accent)}
+.m-num{font-family:var(--f-mono);font-size:11px;text-align:right;font-variant-numeric:tabular-nums;color:var(--ink)}
+
+.lab{border:1px solid var(--rule);border-radius:12px;background:var(--paper2);padding:20px;margin:16px 0}
+.seg{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
+.seg button{font-family:var(--f-mono);font-size:11px;letter-spacing:.04em;border:1px solid var(--rule);background:var(--paper);color:var(--ink);border-radius:999px;padding:6px 12px;cursor:pointer;transition:all .2s}
+.seg button:hover{border-color:var(--accent)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--white);border-color:var(--ink)}
+.lab-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-bottom:12px}
+.lab-explain{font-size:13.5px;color:var(--ink);background:var(--paper);border:1px solid var(--rule);border-radius:8px;padding:10px 14px;max-width:none}
+.lab-stats{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.lab-sim{margin:4px 0 12px}
+.sim-strip{display:flex;align-items:flex-end;gap:6px;height:90px;position:relative;padding-top:6px;border-bottom:1px solid var(--rule)}
+.sim-col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:4px}
+.sim-bar{width:100%;max-width:44px;border-radius:4px 4px 0 0;background:var(--accent2);transition:height .5s ease,background-color .3s}
+.sim-bar.split{background:var(--accent)}
+.sim-v{font-family:var(--f-mono);font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums}
+.sim-th{position:absolute;left:0;right:0;border-top:2px dashed var(--gold);transition:bottom .3s}
+.sim-th span{position:absolute;right:0;top:-18px;font-family:var(--f-mono);font-size:10px;color:var(--gold);background:var(--paper2);padding:0 4px}
+.sim-names{display:flex;gap:6px;margin-top:4px}
+.sim-names span{flex:1;text-align:center;font-family:var(--f-mono);font-size:9.5px;color:var(--muted)}
+.lab-out{display:flex;flex-direction:column;gap:8px}
+.ck{background:var(--paper);border:1px solid var(--rule);border-left:4px solid var(--ck);border-radius:8px;padding:10px 12px}
+.ck.anim{animation:fadeUp .4s ease both;animation-delay:calc(var(--i) * .05s)}
+.ck-head{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin-bottom:6px}
+.ck-id{font-family:var(--f-mono);font-size:10.5px;font-weight:600;color:var(--ck)}
+.ck-len{font-family:var(--f-mono);font-size:10.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.ck-text{font-size:12.5px;line-height:1.55;white-space:pre-wrap;word-break:break-word;color:var(--text)}
+.ck-ov{background:color-mix(in srgb,var(--gold) 28%,transparent);color:var(--ink);border-radius:3px;padding:0 1px}
+.ck-hdr{background:color-mix(in srgb,var(--accent3) 14%,transparent);color:var(--accent3);border-radius:3px;padding:0 3px;font-weight:500}
+.ck-children{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.ck-child{font-size:12px;line-height:1.5;border:1px dashed var(--rule);border-radius:6px;padding:6px 10px;background:var(--paper2)}
+.ck-child b{font-family:var(--f-mono);font-size:10px;color:var(--accent3);margin-right:6px;font-weight:600}
+.ck-child.hit{border-color:var(--accent);border-style:solid;background:color-mix(in srgb,var(--accent) 7%,var(--paper))}
+.lab-src summary{cursor:pointer;font-family:var(--f-mono);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-top:14px}
+.lab-src pre{font-family:var(--f-mono);font-size:11.5px;white-space:pre-wrap;background:var(--paper);border:1px solid var(--rule);border-radius:8px;padding:12px;margin:8px 0 0;color:var(--text)}
+.ctx-compare{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:16px 0}
+.ctx-card{border:1px solid var(--rule);border-radius:10px;padding:12px 14px;background:var(--paper)}
+.ctx-card h4{margin-bottom:6px}
+.ctx-card p{font-size:13px;margin:0;font-family:var(--f-mono);line-height:1.6}
+
+/* ═════════ 06 Reranking ═════════ */
+.enc{display:flex;flex-direction:column;gap:12px}
+.enc-lane{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.enc-box{border:1px solid var(--rule);border-radius:8px;background:var(--paper);padding:8px 12px;font-size:13px;font-weight:500;line-height:1.35;max-width:250px}
+.enc-box small{display:block;font-weight:400;font-size:12px;color:var(--muted)}
+.enc-box.pair{border-color:var(--accent3);background:color-mix(in srgb,var(--accent3) 6%,var(--paper))}
+.enc-model{font-family:var(--f-mono);font-size:11px;border-radius:8px;background:var(--ink);color:var(--white);padding:8px 12px}
+.enc-model.cross{background:var(--accent3)}
+.enc-arr{width:34px;height:2px;background:var(--rule);position:relative;overflow:hidden;flex-shrink:0}
+.enc-arr::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(90deg,var(--accent) 0 6px,transparent 6px 14px);animation:flowX .7s linear infinite}
+.enc-vec{font-family:var(--f-mono);font-size:11.5px;color:var(--accent3);background:var(--paper2);border:1px solid var(--rule);border-radius:6px;padding:4px 8px}
+.enc-pre{font-family:var(--f-mono);font-size:10px;color:var(--gold)}
+.enc-join{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px;border:1px dashed var(--rule);border-radius:8px;background:var(--paper)}
+.score{font-family:var(--f-display);font-size:26px;font-weight:900;font-variant-numeric:tabular-nums;line-height:1}
+.score.bad{color:var(--accent)}.score.good{color:var(--accent2)}.score.neutral{color:var(--gold)}
+.enc-warn{font-size:13px;color:var(--warn-text);background:var(--warn-bg);border:1px solid var(--warn-line);border-radius:8px;padding:10px 12px}
+.cost-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.cost-card{border:1px solid var(--rule);border-radius:10px;padding:14px;background:var(--paper)}
+.cost-card h4{margin-bottom:6px}
+.cost-big{font-family:var(--f-display);font-size:30px;font-weight:900;line-height:1.1;font-variant-numeric:tabular-nums}
+.cost-card p{font-size:12.5px;margin:6px 0 0}
+.funnel{display:flex;flex-direction:column;align-items:center;gap:8px}
+.fn-bar{height:46px;border-radius:8px;display:flex;align-items:center;justify-content:center;text-align:center;padding:0 10px;color:var(--white);font-size:13px;font-weight:500;width:0;opacity:0;transition:width .7s cubic-bezier(.2,.8,.2,1),opacity .4s;overflow:hidden;white-space:nowrap}
+.fn-bar small{font-family:var(--f-mono);font-size:10px;opacity:.75;margin-left:8px}
+.is-on .fn-bar{opacity:1}
+.is-on .fn-1{width:100%;transition-delay:0s}.is-on .fn-2{width:72%;transition-delay:.25s}.is-on .fn-3{width:46%;transition-delay:.5s}.is-on .fn-4{width:30%;transition-delay:.75s}
+.fn-1{background:var(--muted)}.fn-2{background:var(--accent3)}.fn-3{background:var(--accent2)}.fn-4{background:var(--accent)}
+.rr-q{font-size:14px;margin-bottom:12px;padding:10px 14px;border-radius:10px;background:var(--ink);color:var(--white)}
+.rr-q span{font-family:var(--f-mono);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--on-ink-2);margin-right:8px}
+.rr-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.rr-item{display:grid;grid-template-columns:30px 54px minmax(0,1fr) auto;gap:10px;align-items:center;background:var(--paper);border:1px solid var(--rule);border-radius:8px;padding:9px 12px;transition:opacity .4s,border-color .4s,background-color .4s}
+.rr-rank{font-family:var(--f-display);font-size:20px;font-weight:900;color:var(--rule);text-align:center;font-variant-numeric:tabular-nums}
+.rr-sec{font-family:var(--f-mono);font-size:11px;font-weight:600;color:var(--accent3)}
+.rr-text{font-size:13px;line-height:1.4}
+.rr-scores{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.rr-item.cut{opacity:.35}
+.rr-item.sent{border-color:var(--accent2);background:color-mix(in srgb,var(--accent2) 6%,var(--paper))}
+.rr-item.sent .rr-rank{color:var(--accent2)}
+.rr-item.right .rr-sec::after{content:" ✓";color:var(--accent2)}
+.rrf-q{font-size:14px;margin-bottom:14px;padding:10px 14px;border-radius:10px;background:var(--ink);color:var(--white)}
+.rrf-q span{font-family:var(--f-mono);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--on-ink-2);margin-right:8px}
+.rrf-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.rrf-h{font-family:var(--f-mono);font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:8px}
+.rrf-col ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.rrf-li{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;background:var(--paper);border:1px solid var(--rule);border-radius:6px;padding:7px 10px;font-size:12.5px}
+.rrf-li b{font-family:var(--f-mono);font-size:11px;color:var(--accent3)}
+.rrf-li .r{font-family:var(--f-mono);font-size:10px;color:var(--muted)}
+.rrf-li .calc-chip{margin-left:auto}
+.rrf-li.win{border-color:var(--accent2);background:color-mix(in srgb,var(--accent2) 7%,var(--paper))}
+.rrf-li.exact b{color:var(--accent)}
+.rrf-formula{margin-top:14px;font-family:var(--f-mono);font-size:12.5px;color:var(--ink);background:var(--paper);border:1px dashed var(--gold);border-radius:8px;padding:10px 14px;overflow-x:auto;white-space:nowrap}
+.is-on .rrf-li{animation:fadeUp .4s ease both}
+.rrf-col .is-on{transition-delay:.0s}
+
+/* ═════════ 07 Interview bank ═════════ */
+.qa-group{margin:28px 0 8px;display:flex;align-items:center;gap:10px}
+.qa{border:1px solid var(--rule);border-radius:10px;background:var(--paper);margin:8px 0;overflow:hidden;transition:border-color .2s}
+.qa[open]{border-color:var(--accent3)}
+.qa summary{cursor:pointer;list-style:none;display:flex;gap:12px;align-items:flex-start;padding:14px 16px;font-size:14.5px;font-weight:500;line-height:1.45}
+.qa summary::-webkit-details-marker{display:none}
+.qa summary .qn{font-family:var(--f-mono);font-size:11px;color:var(--accent);padding-top:3px;flex-shrink:0;width:26px}
+.qa summary .plus{margin-left:auto;font-family:var(--f-mono);color:var(--muted);transition:transform .25s;flex-shrink:0}
+.qa[open] summary .plus{transform:rotate(45deg);color:var(--accent3)}
+.qa-body{padding:0 16px 14px 54px}
+.qa[open] .qa-body{animation:fadeUp .3s ease both}
+.qa-body p,.qa-body li{font-size:13.5px}
+.qa-body ul{margin:0 0 10px;padding-left:18px;max-width:68ch}
+.qa-body li{color:var(--text);margin-bottom:4px;line-height:1.6}
+.qa-tools{display:flex;gap:8px;margin:12px 0}
+.qa-btn{font-family:var(--f-mono);font-size:11px;text-transform:uppercase;letter-spacing:.06em;background:var(--paper);border:1px solid var(--rule);border-radius:6px;padding:6px 12px;cursor:pointer;color:var(--ink)}
+.qa-btn:hover{border-color:var(--accent)}
+
+/* ── Responsive ── */
+@media (max-width:1100px){
+  .main-content{padding:48px 36px 72px}
+  .prob-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:900px){
+  .layout-container{flex-direction:column}
+  .sidebar{width:100%;height:auto;position:sticky;top:env(safe-area-inset-top,0px);padding-block:12px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));overflow:visible}
+  .nav-brand{padding:0;margin:0}
+  .nav-toggle{display:inline-flex}
+  .nav-links{display:none;max-height:70vh;overflow-y:auto;padding-top:8px}
+  .sidebar.open .nav-links{display:block}
+  .nav-group-label{padding:0 4px}
+  .nav-link{padding:10px 8px}
+  .nav-progress{position:absolute;left:0;right:0;bottom:0;margin:0;border-radius:0;height:2px}
+  .nav-foot{display:none}
+  .main-content{max-width:100%;padding-block:32px 64px;padding-left:max(20px,env(safe-area-inset-left,0px));padding-right:max(20px,env(safe-area-inset-right,0px))}
+  .section-block{scroll-margin-top:84px}
+  .hero{grid-template-columns:1fr;gap:28px}
+  .chat-stage,.gl-grid,.cos-wrap{grid-template-columns:1fr}
+  .doc-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .calc-controls{grid-template-columns:1fr}
+  .calc-row{grid-template-columns:110px minmax(0,1fr) 112px}
+  .kw-item{grid-template-columns:64px minmax(0,1fr)}
+  .kw-meta{grid-column:1/-1;justify-items:stretch}
+  .rrf-grid{grid-template-columns:1fr}
+  .tray{grid-template-columns:1fr}
+}
+@media (max-width:760px){
+  .pipe{flex-direction:column;align-items:stretch}
+  .pipe-node,.pipe.six .pipe-node{width:100%;flex-direction:row;align-items:baseline;gap:10px}
+  .pipe-link{flex:0 0 18px;width:2px;height:18px;min-width:0;margin-left:24px}
+  .pipe-link::after{background:repeating-linear-gradient(180deg,var(--accent) 0 6px,transparent 6px 14px)}
+  .pipe-link.flow::after{animation-name:flowY}
+  .pipe-node.current{animation:ringPulse 1.6s ease-out infinite}
+}
+@media (max-width:600px){
+  .section-header{gap:10px}
+  .section-num-big{font-size:36px}
+  .section-title{font-size:22px}
+  .prob-grid,.cost-grid,.ctx-compare,.lab-controls{grid-template-columns:1fr}
+  .doc-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .calc-row{grid-template-columns:1fr;gap:6px}
+  .calc-val{text-align:left}
+  #space-canvas{height:340px}
+  .lim-pages{grid-template-columns:repeat(12,minmax(0,1fr));height:auto}
+  .lim-page{height:44px}
+  .lim-page:nth-child(n+13){margin-top:30px}
+  .rr-item{grid-template-columns:26px minmax(0,1fr);}
+  .rr-sec{grid-column:2}
+  .rr-text{grid-column:1/-1}
+  .rr-scores{grid-column:1/-1;flex-direction:row;justify-content:flex-start}
+  .meter{grid-template-columns:96px minmax(0,1fr) 36px}
+  .qa-body{padding-left:16px}
+  .dim-counter b{font-size:26px}
+}
+
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;animation-delay:0s!important;transition-duration:.01ms!important;transition-delay:0s!important;scroll-behavior:auto!important}
+}
+</style>
+
+<div class="layout-container">
+
+<!-- ═════════ Sidebar ═════════ -->
+<nav class="sidebar" id="sidebar" aria-label="Contents">
+  <div class="nav-top">
+    <div class="nav-brand">
+      <div class="logo">RAG<span class="accent-dot">.</span>Notes</div>
+      <div class="sub">Sheryians Coding School</div>
+    </div>
+    <button class="nav-toggle" id="nav-toggle" type="button" aria-expanded="false" aria-controls="nav-links">Contents</button>
+  </div>
+  <div class="nav-links" id="nav-links">
+    <div class="nav-group-label">The problem</div>
+    <a href="#problem" class="nav-link"><span class="nav-num">1</span>The rotten biryani</a>
+    <a href="#paste" class="nav-link"><span class="nav-num">2</span>Paste the whole PDF?</a>
+    <div class="nav-group-label">How RAG works</div>
+    <a href="#embeddings" class="nav-link"><span class="nav-num">3</span>Embeddings &amp; vectors</a>
+    <a href="#stages" class="nav-link"><span class="nav-num">4</span>Ingestion &amp; retrieval</a>
+    <div class="nav-group-label">Interview depth</div>
+    <a href="#chunking" class="nav-link"><span class="nav-num">5</span>Chunking strategies</a>
+    <a href="#reranking" class="nav-link"><span class="nav-num">6</span>Reranking &amp; hybrid search</a>
+    <div class="nav-group-label">Prep</div>
+    <a href="#interview" class="nav-link"><span class="nav-num">7</span>Interview questions</a>
+  </div>
+  <div class="nav-progress" aria-hidden="true"><span id="nav-progress"></span></div>
+  <div class="nav-foot">Tip: use ← → on any diagram</div>
+</nav>
+
+<!-- ═════════ Main ═════════ -->
+<main class="main-content">
+<div class="main-inner">
+
+<header class="hero animate-fade-up">
+  <div>
+    <div class="hero-eyebrow">Generative AI ·   batch</div>
+    <h1>Give the bot your <em>rulebook</em>.</h1>
+    <p class="hero-desc">Retrieval-Augmented Generation, built up from one angry support chat. We'll cover why LLMs fail on company data, how embeddings make search by meaning possible, and the chunking and reranking questions interviewers are asking right now.</p>
+    <div class="hero-tags">
+      <span class="hero-tag">Sat · 17 Oct 2026</span>
+      <span class="hero-tag">LangChain JS + Mistral</span>
+      <span class="hero-tag">MongoDB Atlas Vector Search</span>
+    </div>
+  </div>
+  <div class="acro" aria-label="RAG stands for Retrieval, Augmented, Generation">
+    <div class="acro-row" style="--d:.15s"><span class="acro-letter">R</span><div><div class="acro-word">Retrieval</div><div class="acro-desc">Find the 3 policy paragraphs that answer this exact question.</div></div></div>
+    <div class="acro-row" style="--d:.4s"><span class="acro-letter">A</span><div><div class="acro-word">Augmented</div><div class="acro-desc">Put only those paragraphs into the prompt, next to the question.</div></div></div>
+    <div class="acro-row" style="--d:.65s"><span class="acro-letter">G</span><div><div class="acro-word">Generation</div><div class="acro-desc">The LLM writes the answer from those paragraphs, not from memory.</div></div></div>
+  </div>
+</header>
+
+<!-- ═════════ 01 PROBLEM ═════════ -->
+<section class="section-block animate-fade-up" id="problem">
+  <div class="section-header">
+    <div class="section-num-big">01</div>
+    <div class="section-header-text">
+      <div class="section-title">The rotten biryani problem</div>
+      <div class="section-subtitle">Why a smart LLM still fails at a simple support chat</div>
+    </div>
+  </div>
+
+  <p>Meet <strong>Khaana Express</strong>, a food delivery app we'll use for the whole class. The company is made up, the problem is real. Their support chat runs on an LLM. Step through what happens when a customer gets food they can't eat.</p>
+
+  <div class="stepper" id="st-chat" tabindex="0" aria-label="Support chat walkthrough. Use the arrow keys to step.">
+    <div class="stage chat-stage">
+      <div class="chat-phone">
+        <div class="chat-head">
+          <span class="chat-avatar">KE</span>
+          <div><div class="chat-name">Khaana Express Support</div><div class="chat-status">AI assistant · online</div></div>
+        </div>
+        <div class="chat-body">
+          <div class="bubble user st from-right" data-on="0-">My Chicken Biryani just arrived and it's spoiled. It smells sour, I can't eat this. Order #KE-48213 😡</div>
+          <div class="bot-slot">
+            <div class="bubble bot bad st from-left" data-on="1-3">
+              <span class="dots b-dots"><i></i><i></i><i></i></span>
+              <span class="b-text"><span class="bubble-tag">No policy access · made up</span>So sorry! I've processed a full refund of ₹349 to your bank account and added a ₹500 coupon for your next order 🎉</span>
+            </div>
+            <div class="bubble bot good st from-left" data-on="4">
+              <span class="dots b-dots"><i></i><i></i><i></i></span>
+              <span class="b-text"><span class="bubble-tag">Answer from policy §4.2 · §4.3 · §5.1</span>Really sorry about this. Please upload a photo of the biryani. Once it's verified, ₹349 goes to your Khaana Wallet within 2 hours, and I'll add a ₹100 goodwill coupon.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="know-panel stack">
+        <div class="st" data-on="0-1,3-">
+          <h4>What the bot knows about Khaana</h4>
+          <div class="know-rows">
+            <div class="know-row"><div class="know-key">Refund rule for bad food</div><div class="know-val"><span class="kv-unknown st" data-on="0-2">? ? ?</span><span class="kv-known st" data-on="3-">§4.3 Full item value to Khaana Wallet within 2 hours, after photo verification.</span></div></div>
+            <div class="know-row"><div class="know-key">Proof required</div><div class="know-val"><span class="kv-unknown st" data-on="0-2">? ? ?</span><span class="kv-known st" data-on="3-">§4.2 A clear photo of the item, uploaded in the chat.</span></div></div>
+            <div class="know-row"><div class="know-key">Coupon limits</div><div class="know-val"><span class="kv-unknown st" data-on="0-2">? ? ?</span><span class="kv-known st" data-on="3-">§5.1 One goodwill coupon, up to ₹100.</span></div></div>
+            <div class="know-row"><div class="know-key">When to hand over to a human</div><div class="know-val"><span class="kv-unknown st" data-on="0-2">? ? ?</span><span class="kv-known st" data-on="3-">§6.1 Foreign object, allergy or food poisoning: escalate at once.</span></div></div>
+          </div>
+        </div>
+        <div class="reality st from-right" data-on="2">
+          <h4>Reality check against the policy</h4>
+          <ul>
+            <li><span class="x">✗</span><span><b>"Refund to your bank"</b>. Policy §4.3 says refunds go to the Khaana Wallet, and only after verification.</span></li>
+            <li><span class="x">✗</span><span><b>"₹500 coupon"</b>. Policy §5.1 caps goodwill coupons at ₹100.</span></li>
+            <li><span class="x">✗</span><span><b>No photo asked for</b>. Policy §4.2 requires one before any refund.</span></li>
+          </ul>
+          <div class="reality-cost">2,000 chats like this a day × ₹500 = ₹10 lakh a day in coupons that should never exist.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Why did that happen?</h3>
+  <p>Think of the LLM as a brilliant new support agent on their first day. They speak well, they understand the customer, but nobody has handed them the company handbook. Ask them a policy question and they'll improvise something that sounds helpful.</p>
+
+  <div class="concept-box">
+    <div class="concept-box-label">Key Concept · Three gaps every LLM has</div>
+    <ul>
+      <li><strong>Knowledge cutoff.</strong> It learned from data up to a certain date. Anything after that date, it has never seen.</li>
+      <li><strong>No private data.</strong> Khaana's refund policy, coupon rules and internal SOPs were never in its training data. They live on Khaana's servers.</li>
+      <li><strong>Confident guessing.</strong> When it doesn't know, it rarely says "I don't know". It writes the most likely-sounding answer. That's a <strong>hallucination</strong>.</li>
+    </ul>
+  </div>
+
+  <p>So today's real question is this: <strong>how do we give the LLM the right company knowledge at the exact moment a question arrives?</strong></p>
+
+  <div class="quiz-box">
+    <div class="quiz-label">Quick check · 1 of 2</div>
+    <p class="quiz-question">Why did the bot promise a ₹500 coupon?</p>
+    <div class="quiz-options" id="q1a">
+      <button onclick="answerQuiz('q1a', this, false)" class="quiz-option">A &nbsp;—&nbsp; It was trained on Khaana's policy but remembered the number wrong</button>
+      <button onclick="answerQuiz('q1a', this, true)" class="quiz-option">B &nbsp;—&nbsp; It never saw the policy, so it generated a helpful-sounding answer</button>
+    </div>
+    <div class="quiz-feedback hidden" id="q1a-feedback"></div>
+  </div>
+  <div class="quiz-box">
+    <div class="quiz-label">Quick check · 2 of 2</div>
+    <p class="quiz-question">A brand-new model trained last week still can't answer Khaana's refund question. Why?</p>
+    <div class="quiz-options" id="q1b">
+      <button onclick="answerQuiz('q1b', this, false)" class="quiz-option">A &nbsp;—&nbsp; Its knowledge cutoff is still too old</button>
+      <button onclick="answerQuiz('q1b', this, true)" class="quiz-option">B &nbsp;—&nbsp; The refund policy is private data that was never in its training set</button>
+    </div>
+    <div class="quiz-feedback hidden" id="q1b-feedback"></div>
+  </div>
+</section>
+
+<!-- ═════════ 02 PASTE THE PDF ═════════ -->
+<section class="section-block animate-fade-up" id="paste">
+  <div class="section-header">
+    <div class="section-num-big">02</div>
+    <div class="section-header-text">
+      <div class="section-title">Just paste the whole PDF?</div>
+      <div class="section-subtitle">The obvious fix, and why it falls apart at scale</div>
+    </div>
+  </div>
+
+  <p>The first idea everyone has: copy all of Khaana's policy PDFs into the system prompt. Now the bot has every rule in front of it. It even works in a demo. Let's see what happens when we keep going.</p>
+
+  <div class="stepper" id="st-paste" tabindex="0" aria-label="Pasting documents into the prompt. Use the arrow keys to step.">
+    <div class="stage">
+      <div class="stack">
+        <div class="st" data-on="0-3">
+          <div class="ctx-meter" id="ctx-meter">
+            <div class="ctx-top"><span>Context window of the model (a common size: 128K tokens)</span><b id="ctx-num">0.2K / 128K tokens</b></div>
+            <div class="ctx-track"><div class="ctx-fill" id="ctx-fill"></div></div>
+          </div>
+          <div class="prompt-box">
+            <div class="prompt-line"><b>SYSTEM</b> · You are Khaana Express support. Follow the policies below.</div>
+            <div class="doc-grid">
+              <div class="doc" data-k="1"><span class="doc-ico">PDF</span><div class="doc-name">Refund &amp; Quality Policy</div><div class="doc-meta">38 pages · 24K tokens</div></div>
+              <div class="doc" data-k="2"><span class="doc-ico">PDF</span><div class="doc-name">Coupons &amp; Offers T&amp;C</div><div class="doc-meta">52 pages · 33K tokens</div></div>
+              <div class="doc" data-k="2"><span class="doc-ico">PDF</span><div class="doc-name">Delivery Partner SOP</div><div class="doc-meta">61 pages · 39K tokens</div></div>
+              <div class="doc" data-k="2"><span class="doc-ico">PDF</span><div class="doc-name">City-wise Rules</div><div class="doc-meta">40 pages · 26K tokens</div></div>
+              <div class="doc" data-k="3"><span class="doc-ico">PDF</span><div class="doc-name">Restaurant Agreements</div><div class="doc-meta">300 pages · 92K tokens</div></div>
+            </div>
+            <div class="prompt-line"><b>USER</b> · My biryani arrived spoiled. Can I get a refund?</div>
+          </div>
+        </div>
+
+        <div class="st" data-on="4">
+          <div class="lim-title">191 pages pasted. The clause that answers the question (§4.3) sits right in the middle.</div>
+          <div class="lim-pages" id="lim-pages" aria-hidden="true"></div>
+          <div class="lim-axis"><span>Start of prompt</span><span>Middle</span><span>End of prompt</span></div>
+          <p class="lim-note">Research on long prompts ("Lost in the Middle", Liu et al., 2023) found that models use information at the start and the end of the context best, and miss more of what sits in the middle. The shading shows that shape, not exact numbers.</p>
+        </div>
+
+        <div class="st" data-on="5">
+          <div class="mult">
+            <div class="mult-row" style="--d:0s"><span class="mult-op"></span><span class="mult-num">1,22,180</span><span class="mult-lbl">input tokens in one message</span></div>
+            <div class="mult-row" style="--d:.2s"><span class="mult-op">×</span><span class="mult-num">4</span><span class="mult-lbl">messages in a typical chat (the whole prompt is sent again each time)</span></div>
+            <div class="mult-row" style="--d:.4s"><span class="mult-op">×</span><span class="mult-num">1,00,000</span><span class="mult-lbl">support chats a day</span></div>
+            <div class="mult-row total" style="--d:.65s"><span class="mult-op">=</span><span class="mult-num">48.9 billion</span><span class="mult-lbl">input tokens a day, mostly text nobody asked about</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3>What goes wrong</h3>
+  <div class="prob-grid">
+    <div class="prob" style="--i:0"><div class="prob-tag">Cost</div><p>You pay for all 122K tokens on every message, even though 99% of it has nothing to do with the question.</p></div>
+    <div class="prob" style="--i:1"><div class="prob-tag">Latency</div><p>The model must read the whole prompt before it writes a word. Bigger prompt, slower first reply.</p></div>
+    <div class="prob" style="--i:2"><div class="prob-tag">Context limit</div><p>Add one more document and it doesn't fit. Real companies have thousands of documents, not five.</p></div>
+    <div class="prob" style="--i:3"><div class="prob-tag">Lost in the middle</div><p>The one clause that matters is buried among 191 pages, and models miss more facts in the middle of long prompts.</p></div>
+    <div class="prob" style="--i:4"><div class="prob-tag">Stale rules</div><p>Policies change every week. Someone has to keep pasting the latest version into the prompt, by hand.</p></div>
+    <div class="prob" style="--i:5"><div class="prob-tag">Access control</div><p>Internal rules, like the fraud check in §6.2, are now inside the prompt. One clever question could get them shown to a customer.</p></div>
+  </div>
+
+  <h3>Do the maths</h3>
+  <p>Move the sliders. Both bars use the same model and the same price. The only difference is how many tokens go into each message.</p>
+  <div class="calc">
+    <div class="calc-controls">
+      <label class="ctl" for="r-chats"><span>Chats per day: <output id="o-chats">1,00,000</output></span><input type="range" id="r-chats" min="1000" max="500000" step="1000" value="100000"></label>
+      <label class="ctl" for="r-msgs"><span>Messages per chat: <output id="o-msgs">4</output></span><input type="range" id="r-msgs" min="1" max="10" step="1" value="4"></label>
+      <label class="ctl" for="r-price"><span>Price per 1M input tokens: <output id="o-price">$0.40</output></span><input type="range" id="r-price" min="0.1" max="3" step="0.05" value="0.4"></label>
+    </div>
+    <div class="calc-row">
+      <div class="calc-label">Paste every PDF<span>~1,22,400 tokens / message</span></div>
+      <div class="calc-track"><div class="calc-fill fill-bad" id="b-paste"></div></div>
+      <div class="calc-val" id="v-paste">–</div>
+    </div>
+    <div class="calc-row">
+      <div class="calc-label">RAG<span>~2,400 tokens / message</span></div>
+      <div class="calc-track"><div class="calc-fill fill-good" id="b-rag"></div></div>
+      <div class="calc-val" id="v-rag">–</div>
+    </div>
+    <p class="calc-verdict" id="v-ratio">–</p>
+    <div class="calc-foot">Example prices only. Rupee figures assume ₹88 to the dollar. Bars are drawn to scale.</div>
+  </div>
+
+  <div class="concept-box">
+    <div class="concept-box-label">Interview favourite · "Context windows are 1M tokens now. Is RAG dead?"</div>
+    <p class="concept-box-text">No. A bigger window means more fits, but every other problem stays:</p>
+    <ul>
+      <li><strong>Cost and latency</strong> grow with every token you send, on every call.</li>
+      <li><strong>Accuracy</strong> still drops when the key fact is buried in a huge prompt.</li>
+      <li><strong>Scale.</strong> A company knowledge base can run to millions of tokens, more than any window.</li>
+      <li><strong>Freshness and access.</strong> RAG fetches the latest version of only the documents this user is allowed to see.</li>
+      <li><strong>Prompt caching</strong> lowers the cost of repeating a fixed prefix, but it doesn't fix accuracy, access control, or a knowledge base bigger than the window.</li>
+    </ul>
+    <p class="concept-box-text" style="margin-top:8px">In practice teams combine both: a bigger window lets RAG send more chunks, and bigger ones.</p>
+  </div>
+
+  <h3>So what do we actually want?</h3>
+  <p>Send only the 2–3 paragraphs that answer this question. That's cheap, fast, and the model can't miss the answer. The hard part is <strong>finding</strong> those paragraphs. Let's try the simplest search first: matching words.</p>
+
+  <div class="stepper" id="st-kw" tabindex="0" aria-label="Keyword search versus meaning search. Use the arrow keys to step.">
+    <div class="stage">
+      <div class="kw-query"><span class="kw-label">Customer</span><span class="kw-q">"<span class="qw">My</span> <span class="qw key">food</span> <span class="qw">was</span> <span class="qw key">rotten</span>. <span class="qw">I</span> <span class="qw key">want</span> <span class="qw">my</span> <span class="qw key">money</span> <span class="qw key">back</span>."</span></div>
+      <div class="kw-vec st" data-on="3"><span class="muted">embed(question) → </span><span id="kw-vecnums">[ 0.0213, -0.1132, 0.0871, 0.0042, -0.0527, 0.0918, … ]</span> <span class="muted">· 1,024 numbers</span></div>
+      <div class="kw-list">
+        <div class="kw-item best">
+          <div class="kw-sec">§4.1 + 4.3</div>
+          <div class="kw-text">Spoiled, stale or unfit items get a full refund to the Khaana Wallet after photo verification.</div>
+          <div class="kw-meta"><span class="chip chip-red st" data-on="1">0 words match</span><div class="sim st" data-on="2-" style="--w:89%"><div class="sim-track"><div class="sim-fill"></div></div><span class="sim-num">0.89</span></div></div>
+        </div>
+        <div class="kw-item">
+          <div class="kw-sec">§5.1</div>
+          <div class="kw-text">For a verified quality complaint, the agent may add one goodwill coupon worth up to ₹100.</div>
+          <div class="kw-meta"><span class="chip chip-red st" data-on="1">0 words match</span><div class="sim st" data-on="2-" style="--w:71%"><div class="sim-track"><div class="sim-fill"></div></div><span class="sim-num">0.71</span></div></div>
+        </div>
+        <div class="kw-item">
+          <div class="kw-sec">§3.1</div>
+          <div class="kw-text">Orders cancelled before the restaurant accepts them are refunded to the original payment method in 5 to 7 working days.</div>
+          <div class="kw-meta"><span class="chip chip-red st" data-on="1">0 words match</span><div class="sim st" data-on="2-" style="--w:62%"><div class="sim-track"><div class="sim-fill"></div></div><span class="sim-num">0.62</span></div></div>
+        </div>
+        <div class="kw-item">
+          <div class="kw-sec">§5.3</div>
+          <div class="kw-text">The code SORRY50 is only for deliveries that arrive more than 30 minutes late.</div>
+          <div class="kw-meta"><span class="chip chip-red st" data-on="1">0 words match</span><div class="sim st" data-on="2-" style="--w:38%"><div class="sim-track"><div class="sim-fill"></div></div><span class="sim-num">0.38</span></div></div>
+        </div>
+      </div>
+      <div class="kw-verdict st" data-on="1">Keyword search: <strong style="color:inherit">0 results.</strong> The customer says "rotten" and "money back". The policy says "spoiled" and "refund".</div>
+    </div>
+  </div>
+
+  <div class="quiz-box">
+    <div class="quiz-label">Quick check · 1 of 2</div>
+    <p class="quiz-question">The pasted-PDF bot works in a demo. Why does it fall apart in production?</p>
+    <div class="quiz-options" id="q2a">
+      <button onclick="answerQuiz('q2a', this, true)" class="quiz-option">A &nbsp;—&nbsp; Every message pays for every page, replies slow down, and the key clause gets lost in the middle</button>
+      <button onclick="answerQuiz('q2a', this, false)" class="quiz-option">B &nbsp;—&nbsp; LLMs can't read text that came from a PDF</button>
+    </div>
+    <div class="quiz-feedback hidden" id="q2a-feedback"></div>
+  </div>
+  <div class="quiz-box">
+    <div class="quiz-label">Quick check · 2 of 2</div>
+    <p class="quiz-question">The customer writes "rotten". The policy says "unfit for consumption". Which search finds the policy?</p>
+    <div class="quiz-options" id="q2b">
+      <button onclick="answerQuiz('q2b', this, false)" class="quiz-option">A &nbsp;—&nbsp; Keyword search, because both texts are about food</button>
+      <button onclick="answerQuiz('q2b', this, true)" class="quiz-option">B &nbsp;—&nbsp; Search by meaning (semantic search), because it compares what the texts mean, not their words</button>
+    </div>
+    <div class="quiz-feedback hidden" id="q2b-feedback"></div>
+  </div>
+</section>
+
+<!-- ═════════ 03 EMBEDDINGS ═════════ -->
+<section class="section-block animate-fade-up" id="embeddings">
+  <div class="section-header">
+    <div class="section-num-big">03</div>
+    <div class="section-header-text">
+      <div class="section-title">Embeddings and vectors</div>
+      <div class="section-subtitle">How a computer can tell that "rotten" and "spoiled" mean the same thing</div>
+    </div>
+  </div>
+
+  <p>To search by meaning, we need to turn meaning into numbers. Start with something simple: a measuring scale that runs from 0 to 1. We'll measure animals on it and place each one where its number lands.</p>
+
+  <div class="stepper" id="st-space" tabindex="0" aria-label="Animals placed in a 3D measurement space. Use the arrow keys to step, drag to rotate.">
+    <div class="stage space-stage">
+      <canvas id="space-canvas" aria-label="3D plot of animals and objects placed on measurement scales"></canvas>
+      <div class="space-hint st" data-on="4-">Drag to rotate</div>
+      <div class="dim-counter st" data-on="5"><b id="dim-num">3</b><span>scales needed</span></div>
+    </div>
+  </div>
+
+  <div class="concept-box">
+    <div class="concept-box-label">Key Concept</div>
+    <p class="concept-box-text">An <strong>embedding</strong> is a list of numbers that places a piece of text (a word, a sentence, a whole chunk) at a point in this kind of space. That list of numbers is a <strong>vector</strong>. The embedding model is trained so that texts with similar meaning land <strong>near each other</strong>.</p>
+  </div>
+
+  <div class="note-box">
+    <div class="note-box-icon">💡</div>
+    <p class="note-box-text">In our animal story every scale had a name: "dog-like", "lives in water", "flies". <strong>Real embedding dimensions have no names.</strong> The model learns them during training, and meaning is spread across all of them together. If an interviewer asks "what does dimension 42 mean?", the right answer is that no single dimension means anything readable on its own.</p>
+  </div>
+
+  <h3>From animals to sentences</h3>
+  <p>The same idea works for whole sentences. Every policy paragraph becomes a point. Similar rules cluster together. When a customer's question arrives, we turn it into a point too, and look at what's closest.</p>
+
+  <div class="stepper" id="st-map" tabindex="0" aria-label="Sentence embedding map. Use the arrow keys to step.">
+    <div class="stage">
+      <div class="svg-scroll">
+        <svg viewBox="0 0 640 360" role="img" aria-label="Map of policy sentences grouped by meaning, with the customer question landing near the refund cluster">
+          <circle class="map-cluster" cx="210" cy="120" r="112"/>
+          <circle class="map-cluster" cx="505" cy="125" r="108"/>
+          <circle class="map-cluster" cx="470" cy="290" r="66"/>
+          <circle class="map-cluster" cx="165" cy="292" r="64"/>
+          <text class="map-cl-label" x="210" y="28">REFUNDS &amp; QUALITY</text>
+          <text class="map-cl-label" x="505" y="38">COUPONS</text>
+          <text class="map-cl-label" x="470" y="244">DELIVERY</text>
+          <text class="map-cl-label" x="165" y="248">FOOD SAFETY</text>
+
+          <circle class="nn-ring sf" data-on="2-" cx="165" cy="130" r="80"/>
+          <line class="nn-line sf" data-on="2-" x1="165" y1="130" x2="120" y2="110"/>
+          <line class="nn-line sf" data-on="2-" x1="165" y1="130" x2="205" y2="72"/>
+          <line class="nn-line sf" data-on="2-" x1="165" y1="130" x2="240" y2="175"/>
+
+          <circle class="map-pt near" cx="120" cy="110" r="5"/><text class="map-label" x="129" y="114">Spoiled food → refund</text>
+          <circle class="map-pt near" cx="205" cy="72" r="5"/><text class="map-label" x="214" y="76">Wallet refund in 2 hrs</text>
+          <circle class="map-pt near" cx="240" cy="175" r="5"/><text class="map-label" x="249" y="179">Cancelled order refund</text>
+          <circle class="map-pt" cx="425" cy="82" r="5"/><text class="map-label" x="434" y="86">Goodwill coupon ₹100</text>
+          <circle class="map-pt" cx="445" cy="128" r="5"/><text class="map-label" x="454" y="132">Coupons expire in 14 days</text>
+          <circle class="map-pt" cx="430" cy="172" r="5"/><text class="map-label" x="439" y="176">SORRY50 for late delivery</text>
+          <circle class="map-pt" cx="420" cy="275" r="5"/><text class="map-label" x="429" y="279">Rider 30+ min late</text>
+          <circle class="map-pt" cx="445" cy="314" r="5"/><text class="map-label" x="454" y="318">Rude rider complaint</text>
+          <circle class="map-pt" cx="115" cy="280" r="5"/><text class="map-label" x="124" y="284">Foreign object in food</text>
+          <circle class="map-pt" cx="135" cy="318" r="5"/><text class="map-label" x="144" y="322">Food poisoning report</text>
+
+          <g class="q-dot" id="q-dot" style="transform:translate(585px,22px);opacity:0">
+            <circle r="7"/>
+            <text y="24">your question</text>
+          </g>
+        </svg>
+      </div>
+      <div class="tray">
+        <div class="tray-item st" data-on="3"><span>nearest 1 · §4.1</span>Spoiled, stale or unfit items can be reported within 2 hours of delivery.</div>
+        <div class="tray-item st" data-on="3"><span>nearest 2 · §4.3</span>After photo verification, the full item value goes to the Khaana Wallet within 2 hours.</div>
+        <div class="tray-item st" data-on="3"><span>nearest 3 · §3.1</span>Cancelled orders are refunded to the original payment method in 5 to 7 working days.</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Real embedding models</h3>
+  <p>Our story needed 3 scales for 7 animals. Real models need hundreds or thousands, because they place every word and sentence in every language. The number of dimensions is fixed per model.</p>
+  <div class="table-wrap">
+    <table class="flag-table">
+      <thead><tr><th>Model</th><th>Dimensions</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td><span class="flag-name">mistral-embed</span></td><td><span class="flag-val">1024</span></td><td>Mistral's embedding model. What we'll use in class.</td></tr>
+        <tr><td><span class="flag-name">text-embedding-3-small</span></td><td><span class="flag-val">1536</span></td><td>OpenAI, cheap and widely used.</td></tr>
+        <tr><td><span class="flag-name">text-embedding-3-large</span></td><td><span class="flag-val">3072</span></td><td>OpenAI, higher quality, bigger vectors to store.</td></tr>
+        <tr><td><span class="flag-name">bge-base-en-v1.5</span></td><td><span class="flag-val">768</span></td><td>Open source (BAAI). You can run it yourself.</td></tr>
+        <tr><td><span class="flag-name">all-MiniLM-L6-v2</span></td><td><span class="flag-val">384</span></td><td>Small open-source model, fast on a laptop CPU.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="warning-box">
+    <div class="warning-box-icon">⚠️</div>
+    <p class="warning-box-text"><strong>Use the same embedding model for your documents and your questions.</strong> Vectors from different models live in different spaces. Comparing them is like measuring one thing in centimetres and the other in kilograms.</p>
+  </div>
+
+  <h3>Measuring "near": cosine similarity</h3>
+  <p>Each vector is an arrow from the origin. To compare two texts we look at the <strong>angle</strong> between their arrows. Same direction means same meaning. Drag the slider.</p>
+  <div class="cos-wrap">
+    <svg viewBox="0 0 340 200" aria-label="Two vectors and the angle between them">
+      <defs>
+        <marker id="arrA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#1B4587"/></marker>
+        <marker id="arrB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#C84B1F"/></marker>
+      </defs>
+      <line x1="20" y1="180" x2="320" y2="180" stroke="#D4CEBC" stroke-width="1"/>
+      <path id="cos-arc" class="cos-arc" d=""/>
+      <line class="cos-vec cos-a" x1="170" y1="180" x2="310" y2="180" marker-end="url(#arrA)"/>
+      <line id="cos-b" class="cos-vec cos-b" x1="170" y1="180" x2="290" y2="108" marker-end="url(#arrB)"/>
+      <circle cx="170" cy="180" r="4" fill="#0E0F14"/>
+      <text class="cos-lbl" x="300" y="170" fill="#1B4587" text-anchor="end">A</text>
+      <text id="cos-blbl" class="cos-lbl" x="290" y="98" fill="#C84B1F" text-anchor="middle">B</text>
+      <text id="cos-deg" class="cos-lbl" x="222" y="168" fill="#B8860B">30°</text>
+    </svg>
+    <div>
+      <div class="cos-big" id="cos-val">0.87</div>
+      <div class="cos-mean" id="cos-mean" style="color:var(--accent2)">very similar</div>
+      <label class="ctl" for="cos-range"><span>Angle between A and B</span><input type="range" id="cos-range" min="0" max="180" step="1" value="30"></label>
+      <p class="cos-pair" style="margin-top:12px"><b>A</b> = "spoiled food refund"<br><b>B</b> = <span id="cos-btext">"rotten food, money back"</span></p>
+    </div>
+  </div>
+  <div class="code-block">
+    <div class="code-header"><span class="code-label">cosine.js</span><button onclick="copyCode(this)" class="code-copy-btn">copy</button></div>
+    <pre class="code-pre" data-hl="js">// cos(θ) = (A · B) / (|A| × |B|)
+function cosine(a, b) {
+  let dot = 0, lenA = 0, lenB = 0;
+  for (let i = 0; i &lt; a.length; i++) {
+    dot  += a[i] * b[i];
+    lenA += a[i] * a[i];
+    lenB += b[i] * b[i];
+  }
+  return dot / (Math.sqrt(lenA) * Math.sqrt(lenB));
+}
+
+cosine([1, 0], [1, 0]);   // 1   → same direction
+cosine([1, 0], [0, 1]);   // 0   → unrelated
+cosine([1, 0], [-1, 0]);  // -1  → opposite</pre>
+  </div>
+  <div class="note-box">
+    <div class="note-box-icon">💡</div>
+    <p class="note-box-text">With real text embeddings most scores land between 0 and 1, and you rarely see negatives. <strong>The ranking matters more than the raw number.</strong> A 0.71 is only "good" if it beats the other chunks.</p>
+  </div>
+
+  <h3>Try it live: TensorFlow Embedding Projector</h3>
+  <p>Open the projector in a new tab during class. It shows real word embeddings squashed into 3D so you can rotate them like our animal plot: <a href="https://projector.tensorflow.org/" target="_blank" rel="noopener">projector.tensorflow.org</a></p>
+  <div class="flow-diagram">
+    <div class="flow-step" style="--i:0"><div class="flow-connector"><div class="flow-dot flow-dot-accent"></div><div class="flow-line"></div></div><div class="flow-content"><div class="flow-title">Open the projector and keep the default dataset</div><div class="flow-desc">It loads "Word2Vec 10K": 10,000 English words, each with its own embedding.</div></div></div>
+    <div class="flow-step" style="--i:1"><div class="flow-connector"><div class="flow-dot flow-dot-accent"></div><div class="flow-line"></div></div><div class="flow-content"><div class="flow-title">Search for "dog" in the right-hand panel</div><div class="flow-desc">Click the result. The view zooms to it and lists its nearest neighbours with their distance.</div></div></div>
+    <div class="flow-step" style="--i:2"><div class="flow-connector"><div class="flow-dot flow-dot-accent"></div><div class="flow-line"></div></div><div class="flow-content"><div class="flow-title">Try "food", "money" and "late"</div><div class="flow-desc">Ask the class to predict the neighbours before you click. Similar words sit together.</div></div></div>
+    <div class="flow-step" style="--i:3"><div class="flow-connector"><div class="flow-dot flow-dot-accent"></div><div class="flow-line"></div></div><div class="flow-content"><div class="flow-title">Switch between UMAP, t-SNE and PCA</div><div class="flow-desc">These are different ways to squash hundreds of dimensions into 3 so our eyes can see them.</div></div></div>
+    <div class="flow-step" style="--i:4"><div class="flow-connector"><div class="flow-dot flow-dot-green"></div></div><div class="flow-content"><div class="flow-title">Connect it back to RAG</div><div class="flow-desc">The projector shows word embeddings. RAG uses sentence and chunk embeddings, but the idea is the same: near means similar.</div></div></div>
+  </div>
+
+  <div class="quiz-box">
+    <div class="quiz-label">Quick check · 1 of 2</div>
+    <p class="quiz-question">What does dimension 42 of a <code style="background:transparent;border:none;color:var(--val-c);padding:0">mistral-embed</code> vector represent?</p>
+    <div class="quiz-options" id="q3a">
+      <button onclick="answerQuiz('q3a', this, false)" class="quiz-option">A &nbsp;—&nbsp; A specific, readable property such as "is about food"</button>
+      <button onclick="answerQuiz('q3a', this, true)" class="quiz-option">B &nbsp;—&nbsp; Nothing readable by itself. Meaning is spread across all 1,024 dimensions</button>
+    </div>
+    <div class="quiz-feedback hidden" id="q3a-feedback"></div>
+  </div>
+  <div class="quiz-box">
+    <div class="quiz-label">Quick check · 2 of 2</div>
+    <p class="quiz-question">Two embedding vectors point in almost the same direction. What's their cosine similarity close to?</p>
+    <div class="quiz-options" id="q3b">
+      <button onclick="answerQuiz('q3b', this, true)" class="quiz-option">A &nbsp;—&nbsp; 1</button>
+      <button onclick="answerQuiz('q3b', this, false)" class="quiz-option">B &nbsp;—&nbsp; 0</button>
+    </div>
+    <div class="quiz-feedback hidden" id="q3b-feedback"></div>
+  </div>
+</section>
+
+<!-- ═════════ 04 TWO STAGES ═════════ -->
+<section class="section-block animate-fade-up" id="stages">
+  <div class="section-header">
+    <div class="section-num-big">04</div>
+    <div class="section-header-text">
+      <div class="section-title">The two stages: ingestion and retrieval</div>
+      <div class="section-subtitle">Every RAG app is two pipelines, one that runs ahead of time and one that runs per question</div>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table class="compare-table">
+      <thead><tr><th>What</th><th>Ingestion</th><th>Retrieval</th></tr></thead>
+      <tbody>
+        <tr><td class="cell-title">When it runs</td><td class="cell-muted">Ahead of time, and again when documents change</td><td class="cell-highlight">Every time a customer asks something</td></tr>
+        <tr><td class="cell-title">Job</td><td class="cell-muted">Turn PDFs into searchable vectors</td><td class="cell-highlight">Find the right chunks and answer from them</td></tr>
+        <tr><td class="cell-title">Speed matters?</td><td class="cell-muted">Not much. It can take minutes.</td><td class="cell-highlight">A lot. The customer is waiting.</td></tr>
+        <tr><td class="cell-title">Restaurant analogy</td><td class="cell-muted">Prepping and labelling ingredients before service</td><td class="cell-highlight">Cooking one order when it comes in</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Stage 1 · Ingestion</h3>
+  <div class="stepper" id="st-ingest" tabindex="0" aria-label="Ingestion pipeline. Use the arrow keys to step.">
+    <div class="stage">
+      <div class="pipe">
+        <div class="pipe-node" data-i="0"><span class="pn-num">01</span><span class="pn-title">Policy PDFs</span><span class="pn-sub">raw files</span></div>
+        <div class="pipe-link" data-i="1"></div>
+        <div class="pipe-node" data-i="1"><span class="pn-num">02</span><span class="pn-title">Load</span><span class="pn-sub">PDF → text</span></div>
+        <div class="pipe-link" data-i="2"></div>
+        <div class="pipe-node" data-i="2"><span class="pn-num">03</span><span class="pn-title">Chunk</span><span class="pn-sub">text → pieces</span></div>
+        <div class="pipe-link" data-i="3"></div>
+        <div class="pipe-node" data-i="3"><span class="pn-num">04</span><span class="pn-title">Embed</span><span class="pn-sub">piece → vector</span></div>
+        <div class="pipe-link" data-i="4"></div>
+        <div class="pipe-node" data-i="4"><span class="pn-num">05</span><span class="pn-title">Store</span><span class="pn-sub">vector DB</span></div>
+      </div>
+      <div class="pipe-detail stack">
+        <div class="st" data-on="0">
+          <div class="pd-title">Input</div>
+          <p>Khaana's knowledge lives in PDFs on a shared drive. Nothing is searchable by meaning yet.</p>
+          <div class="file-row"><span class="chip">refund-policy.pdf · 38 pages</span><span class="chip">coupons-tnc.pdf · 52 pages</span><span class="chip">delivery-sop.pdf · 61 pages</span><span class="chip">city-rules.pdf · 40 pages</span></div>
+        </div>
+        <div class="st" data-on="1">
+          <div class="pd-title">Load: one Document per page</div>
+          <p>A loader reads the PDF and gives back plain text plus <strong>metadata</strong> (which file, which page). Keep the metadata. It's how the bot will cite its sources later.</p>
+<div class="mini-code">{
+  <span class="k">pageContent</span>: <span class="s">"4. Food Quality Complaints\n4.1 If an item is spoiled, stale…"</span>,
+  <span class="k">metadata</span>: { <span class="k">source</span>: <span class="s">"refund-policy.pdf"</span>, <span class="k">loc</span>: { <span class="k">pageNumber</span>: <span class="n">12</span> } }
+}</div>
+        </div>
+        <div class="st" data-on="2">
+          <div class="pd-title">Chunk: 191 pages → about 600 pieces of ~800 characters</div>
+          <p>Small enough to be about one thing, big enough to make sense on its own. Section 05 is all about how to cut well.</p>
+          <div class="chunk-chips">
+            <div class="chunk-chip"><span>chunk 41 · 790 chars</span>4.1 If an item is spoiled, stale, undercooked or unfit for consumption…</div>
+            <div class="chunk-chip"><span>chunk 42 · 812 chars</span>4.3 After photo verification, the full item value is refunded to the Khaana Wallet…</div>
+            <div class="chunk-chip"><span>chunk 43 · 768 chars</span>5.1 For a verified quality complaint, the agent may add one goodwill coupon…</div>
+          </div>
+        </div>
+        <div class="st" data-on="3">
+          <div class="pd-title">Embed: each chunk becomes 1,024 numbers</div>
+          <div class="embed-row">
+            <span class="chip chip-blue">chunk 42 · "4.3 After photo verification…"</span>
+            <span class="embed-arrow">→ mistral-embed →</span>
+            <span class="vec-box" id="ing-vec">[ 0.0213, -0.1132, 0.0871, 0.0042, … ]</span>
+          </div>
+          <p style="margin-top:10px">600 chunks means 600 embedding calls (batched). You pay for this once, not on every question.</p>
+        </div>
+        <div class="st" data-on="4">
+          <div class="pd-title">Store: text + vector + metadata, side by side</div>
+          <p>We'll use MongoDB Atlas, since you already know Mongo. A <strong>vector index</strong> on the <code>embedding</code> field makes "find the nearest vectors" fast.</p>
+<div class="mini-code">{
+  <span class="k">_id</span>: ObjectId(<span class="s">"…"</span>),
+  <span class="k">text</span>: <span class="s">"4.3 After photo verification, the full item value…"</span>,
+  <span class="k">embedding</span>: [<span class="n">0.0213</span>, <span class="n">-0.1132</span>, <span class="n">0.0871</span>, <span class="c">/* … 1,024 numbers */</span>],
+  <span class="k">source</span>: <span class="s">"refund-policy.pdf"</span>, <span class="k">pageNumber</span>: <span class="n">12</span>
+}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Stage 2 · Retrieval (and generation)</h3>
+  <div class="stepper" id="st-retrieve" tabindex="0" aria-label="Retrieval pipeline. Use the arrow keys to step.">
+    <div class="stage">
+      <div class="pipe six">
+        <div class="pipe-node" data-i="0"><span class="pn-num">01</span><span class="pn-title">Question</span><span class="pn-sub">from chat</span></div>
+        <div class="pipe-link" data-i="1"></div>
+        <div class="pipe-node" data-i="1"><span class="pn-num">02</span><span class="pn-title">Embed</span><span class="pn-sub">same model</span></div>
+        <div class="pipe-link" data-i="2"></div>
+        <div class="pipe-node" data-i="2"><span class="pn-num">03</span><span class="pn-title">Search</span><span class="pn-sub">top-k nearest</span></div>
+        <div class="pipe-link" data-i="3"></div>
+        <div class="pipe-node" data-i="3"><span class="pn-num">04</span><span class="pn-title">Augment</span><span class="pn-sub">build prompt</span></div>
+        <div class="pipe-link" data-i="4"></div>
+        <div class="pipe-node" data-i="4"><span class="pn-num">05</span><span class="pn-title">Generate</span><span class="pn-sub">LLM call</span></div>
+        <div class="pipe-link" data-i="5"></div>
+        <div class="pipe-node" data-i="5"><span class="pn-num">06</span><span class="pn-title">Answer</span><span class="pn-sub">with sources</span></div>
+      </div>
+      <div class="pipe-detail stack">
+        <div class="st" data-on="0">
+          <div class="pd-title">The question arrives</div>
+          <div class="rr-q" style="margin:0"><span>Customer</span>My biryani arrived spoiled. Can I get my money back?</div>
+        </div>
+        <div class="st" data-on="1">
+          <div class="pd-title">Embed the question with the same model</div>
+          <div class="embed-row">
+            <span class="chip chip-red">"My biryani arrived spoiled…"</span>
+            <span class="embed-arrow">→ mistral-embed →</span>
+            <span class="vec-box" id="ret-vec">[ 0.0198, -0.1047, 0.0912, 0.0011, … ]</span>
+          </div>
+          <p style="margin-top:10px">This is one embedding call, a few milliseconds. Same model as ingestion, so the question lands in the same space as the chunks.</p>
+        </div>
+        <div class="st" data-on="2">
+          <div class="pd-title">Vector search: the 3 nearest chunks (k = 3)</div>
+          <div class="res-list">
+            <div class="res"><b>#1</b><span>§4.3 After photo verification, the full item value goes to the Khaana Wallet within 2 hours.</span><span class="sc">0.89</span></div>
+            <div class="res"><b>#2</b><span>§4.2 The customer must upload a clear photo of the item.</span><span class="sc">0.84</span></div>
+            <div class="res"><b>#3</b><span>§5.1 One goodwill coupon worth up to ₹100 for a verified complaint.</span><span class="sc">0.77</span></div>
+          </div>
+        </div>
+        <div class="st" data-on="3">
+          <div class="pd-title">Augment: rules + retrieved chunks + question</div>
+          <div class="prompt-preview">
+            <div class="pp-seg pp-sys"><span class="pp-tag">System rules</span>You are Khaana Express support. Answer ONLY from the policy context. If the answer isn't there, offer to connect a human agent. Cite section numbers.</div>
+            <div class="pp-seg pp-ctx"><span class="pp-tag">Retrieved context (3 chunks)</span>§4.3 After photo verification, the full item value is refunded to the Khaana Wallet within 2 hours…
+§4.2 The customer must upload a clear photo of the item…
+§5.1 The agent may add one goodwill coupon worth up to ₹100…</div>
+            <div class="pp-seg pp-q"><span class="pp-tag">Question</span>My biryani arrived spoiled. Can I get my money back?</div>
+          </div>
+        </div>
+        <div class="st" data-on="4">
+          <div class="pd-title">Generate</div>
+          <p><span class="dots"><i></i><i></i><i></i></span>&nbsp; <strong>mistral-small-latest</strong> reads about <strong>2,400 tokens</strong> instead of 1,22,000. Faster, cheaper, and the answer is right at the top of the prompt.</p>
+        </div>
+        <div class="st" data-on="5">
+          <div class="pd-title">Answer, grounded and cited</div>
+          <div class="answer-bubble">Really sorry about this. Please upload a photo of the biryani. Once it's verified, ₹349 goes to your Khaana Wallet within 2 hours, and I can add a goodwill coupon of up to ₹100.
+            <div class="chips"><span class="chip chip-green">§4.2 photo proof</span><span class="chip chip-green">§4.3 wallet refund</span><span class="chip chip-green">§5.1 coupon cap</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Build it: LangChain JS + Mistral + MongoDB Atlas</h3>
+  <div class="badge badge-accent">Step 1 · Install</div>
+  <div class="code-block">
+    <div class="code-header"><span class="code-label">Terminal</span><button onclick="copyCode(this)" class="code-copy-btn">copy</button></div>
+    <pre class="code-pre" data-hl="sh">npm i @langchain/core @langchain/mistralai @langchain/community @langchain/textsplitters @langchain/mongodb mongodb pdf-parse dotenv</pre>
+  </div>
+
+  <div class="badge badge-accent">Step 2 · Create the vector index in Atlas</div>
+  <p style="margin-top:10px">In Atlas, open your cluster's <strong>Search</strong> tab and create a <strong>Vector Search</strong> index named <code>vector_index</code> on the <code>policy_chunks</code> collection.</p>
+  <div class="code-block">
+    <div class="code-header"><span class="code-label">vector_index.json</span><button onclick="copyCode(this)" class="code-copy-btn">copy</button></div>
+    <pre class="code-pre" data-hl="json">{
+  "fields": [
+    { "type": "vector", "path": "embedding", "numDimensions": 1024, "similarity": "cosine" },
+    { "type": "filter", "path": "source" }
+  ]
+}</pre>
+  </div>
+  <div class="note-box">
+    <div class="note-box-icon">💡</div>
+    <p class="note-box-text"><strong>numDimensions must match the embedding model.</strong> mistral-embed gives 1,024 numbers, so the index says 1024. Switch models and you must rebuild the index and re-embed everything.</p>
+  </div>
+
+  <div class="badge badge-accent">Step 3 · Ingestion script</div>
+  <div class="code-block">
+    <div class="code-header"><span class="code-label">ingest.js</span><button onclick="copyCode(this)" class="code-copy-btn">copy</button></div>
+    <pre class="code-pre" data-hl="js">import "dotenv/config";
+import { MongoClient } from "mongodb";
+import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
+import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
+import { MistralAIEmbeddings } from "@langchain/mistralai";
+import { MongoDBAtlasVectorSearch } from "@langchain/mongodb";
+
+const client = new MongoClient(process.env.MONGODB_URI);
+const collection = client.db("khaana").collection("policy_chunks");
+
+// 1. Load: one Document per PDF page, with source + page metadata
+const pages = await new PDFLoader("./refund-policy.pdf").load();
+
+// 2. Chunk: ~800 characters, 120 characters of overlap
+const splitter = new RecursiveCharacterTextSplitter({ chunkSize: 800, chunkOverlap: 120 });
+const chunks = await splitter.splitDocuments(pages);
+
+// 3 + 4. Embed every chunk and store text + vector + metadata
+const embeddings = new MistralAIEmbeddings({ model: "mistral-embed" });
+await MongoDBAtlasVectorSearch.fromDocuments(chunks, embeddings, {
+  collection,
+  indexName: "vector_index",
+  textKey: "text",
+  embeddingKey: "embedding",
+});
+
+console.log(`Stored ${chunks.length} chunks`);
+await client.close();</pre>
+  </div>
+
+  <div class="badge badge-accent">Step 4 · Ask a question</div>
+  <div class="code-block">
+    <div class="code-header"><span class="code-label">ask.js</span><button onclick="copyCode(this)" class="code-copy-btn">copy</button></div>
+    <pre class="code-pre" data-hl="js">import "dotenv/config";
+import { MongoClient } from "mongodb";
+import { MistralAIEmbeddings, ChatMistralAI } from "@langchain/mistralai";
+import { MongoDBAtlasVectorSearch } from "@langchain/mongodb";
+
+const client = new MongoClient(process.env.MONGODB_URI);
+const collection = client.db("khaana").collection("policy_chunks");
+
+const embeddings = new MistralAIEmbeddings({ model: "mistral-embed" }); // same model as ingestion
+const vectorStore = new MongoDBAtlasVectorSearch(embeddings, {
+  collection,
+  indexName: "vector_index",
+  textKey: "text",
+  embeddingKey: "embedding",
+});
+
+const question = "My biryani arrived spoiled. Can I get my money back?";
+
+// Retrieval: embed the question + find the 3 nearest chunks
+const results = await vectorStore.similaritySearchWithScore(question, 3);
+results.forEach(([doc, score]) =&gt; console.log(score.toFixed(3), doc.pageContent.slice(0, 60)));
+
+// Augmentation: put the chunks into the prompt
+const context = results.map(([doc]) =&gt; doc.pageContent).join("\n---\n");
+
+// Generation
+const llm = new ChatMistralAI({ model: "mistral-small-latest", temperature: 0 });
+const answer = await llm.invoke([
+  ["system", `You are Khaana Express support.
+Answer ONLY from the policy context below and cite section numbers.
+If the answer is not in the context, say you'll connect a human agent.
+
+Policy context:
+${context}`],
+  ["human", question],
+]);
+
+console.log(answer.content);
+await client.close();</pre>
+  </div>
+  <div class="warning-box">
+    <div class="warning-box-icon">⚠️</div>
+    <p class="warning-box-text"><strong>The system prompt is part of RAG.</strong> Without "answer only from the context" and an escape hatch ("connect a human"), the model may ignore the chunks and fall back to guessing.</p>
+  </div>
+
+  <div class="quiz-box">
+    <div class="quiz-label">Quick check · 1 of 2</div>
+    <p class="quiz-question">When does the ingestion pipeline run?</p>
+    <div class="quiz-options" id="q4a">
+      <button onclick="answerQuiz('q4a', this, false)" class="quiz-option">A &nbsp;—&nbsp; On every customer question, before the LLM call</button>
+      <button onclick="answerQuiz('q4a', this, true)" class="quiz-option">B &nbsp;—&nbsp; Ahead of time, and again whenever the documents change</button>
+    </div>
+    <div class="quiz-feedback hidden" id="q4a-feedback"></div>
+  </div>
+  <div class="quiz-box">
+    <div class="quiz-label">Quick check · 2 of 2</div>
+    <p class="quiz-question">Your Atlas index says <code style="background:transparent;border:none;color:var(--val-c);padding:0">numDimensions: 1536</code>, but you embed with mistral-embed. What happens?</p>
+    <div class="quiz-options" id="q4b">
+      <button onclick="answerQuiz('q4b', this, false)" class="quiz-option">A &nbsp;—&nbsp; Atlas pads the vectors and search works normally</button>
+      <button onclick="answerQuiz('q4b', this, true)" class="quiz-option">B &nbsp;—&nbsp; Search breaks, because the 1,024-number vectors don't match the index size</button>
+    </div>
+    <div class="quiz-feedback hidden" id="q4b-feedback"></div>
+  </div>
+</section>
+
+<!-- ═════════ 05 CHUNKING ═════════ -->
+<section class="section-block animate-fade-up" id="chunking">
+  <div class="section-header">
+    <div class="section-num-big">05</div>
+    <div class="section-header-text">
+      <div class="section-title">Chunking strategies</div>
+      <div class="section-subtitle">How you cut the documents decides what the bot can ever find</div>
+    </div>
+  </div>
+
+  <p>Retrieval can only return chunks that exist. If the answer is split across two chunks, or drowned inside a giant one, no embedding model can save you. That's why interviewers love this topic: <strong>bad chunking is the most common reason a RAG bot gives wrong answers.</strong></p>
+
+  <h3>The trade-off: too big, too small, just right</h3>
+  <div class="stepper" id="st-gold" tabindex="0" aria-label="Chunk size trade-off. Use the arrow keys to step.">
+    <div class="stage">
+      <div class="gl-grid">
+        <div class="doc-mock" id="doc-mock" aria-hidden="true">
+          <div class="dm-win" id="win-a"><span class="w-lbl">chunk</span></div>
+          <div class="dm-win b" id="win-b" style="opacity:0"><span class="w-lbl">chunk B</span></div>
+        </div>
+        <div>
+          <div class="gl-recv">
+            <div class="gl-lbl">What the LLM receives</div>
+            <div class="stack">
+              <p class="st" data-on="0">§4 Food Quality Complaints, §5 Coupons, §6 Escalation… the whole section, about 2,000 words.<span class="why">One vector for many topics gets blurry, so the match is weaker. The LLM also gets a lot of noise.</span></p>
+              <p class="st" data-on="1">"…to the Khaana Wallet within 2 hours."<span class="why">Within 2 hours of what? A refund? The complaint window? The LLM has to guess again.</span></p>
+              <p class="st" data-on="2">"4.3 After photo verification, the full item value is refunded to the Khaana Wallet within 2 hours."<span class="why" style="color:var(--accent2)">One complete idea. Sharp match, enough context.</span></p>
+              <p class="st" data-on="3">Chunk A ends partway into clause 4.3. Chunk B starts one line earlier and holds all of 4.3.<span class="why" style="color:var(--accent2)">Overlap repeats the text at the boundary, so a clause cut by one chunk survives whole in the next.</span></p>
+            </div>
+          </div>
+          <div class="meter"><span>Match precision</span><div class="m-track"><div class="m-fill m-prec" id="m-prec"></div></div><span class="m-num" id="n-prec">0</span></div>
+          <div class="meter"><span>Context kept</span><div class="m-track"><div class="m-fill m-ctx" id="m-ctx"></div></div><span class="m-num" id="n-ctx">0</span></div>
+          <div class="meter"><span>Tokens sent</span><div class="m-track"><div class="m-fill m-tok" id="m-tok"></div></div><span class="m-num" id="n-tok">0</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Chunking lab</h3>
+  <p>Below is part of Khaana's real-looking refund policy. Pick a strategy, move the sliders, and watch where the cuts land. Red flags mark chunks that end badly.</p>
+  <div class="lab" id="lab">
+    <div class="seg" id="lab-strats" role="group" aria-label="Chunking strategy">
+      <button type="button" data-s="fixed" aria-pressed="true">Fixed-size</button>
+      <button type="button" data-s="overlap" aria-pressed="false">Fixed + overlap</button>
+      <button type="button" data-s="recursive" aria-pressed="false">Recursive</button>
+      <button type="button" data-s="structure" aria-pressed="false">Structure-aware</button>
+      <button type="button" data-s="semantic" aria-pressed="false">Semantic</button>
+      <button type="button" data-s="parent" aria-pressed="false">Parent-child</button>
+    </div>
+    <div class="lab-controls">
+      <label class="ctl" id="ctl-size" for="r-size"><span>Chunk size: <output id="o-size">250</output> characters</span><input type="range" id="r-size" min="120" max="700" step="10" value="250"></label>
+      <label class="ctl" id="ctl-ov" for="r-ov"><span>Overlap: <output id="o-ov">50</output> characters</span><input type="range" id="r-ov" min="0" max="150" step="10" value="50"></label>
+      <label class="ctl" id="ctl-th" for="r-th"><span>Split when similarity drops below: <output id="o-th">0.60</output></span><input type="range" id="r-th" min="0.2" max="0.9" step="0.01" value="0.6"></label>
+    </div>
+    <p class="lab-explain" id="lab-explain"></p>
+    <div class="lab-stats" id="lab-stats"></div>
+    <div class="lab-sim" id="lab-sim"></div>
+    <div class="lab-out" id="lab-out" aria-live="polite"></div>
+    <details class="lab-src"><summary>Show the source text</summary><pre id="lab-src"></pre></details>
+  </div>
+
+  <h3>The six strategies at a glance</h3>
+  <div class="table-wrap">
+    <table class="compare-table">
+      <thead><tr><th>Strategy</th><th>How it splits</th><th>Use it when</th><th>Watch out for</th></tr></thead>
+      <tbody>
+        <tr><td class="cell-title">Fixed-size</td><td class="cell-muted">Every N characters or tokens</td><td>Quick prototypes, very uniform text</td><td class="cell-muted">Cuts words and sentences in half</td></tr>
+        <tr><td class="cell-title">Fixed + overlap</td><td class="cell-muted">Every N, repeating the last O characters</td><td>Same, with safer boundaries</td><td class="cell-muted">Duplicate text in storage and results</td></tr>
+        <tr><td class="cell-title">Recursive</td><td class="cell-muted">Paragraphs, then lines, then sentences, then words, until under N</td><td class="cell-highlight">Your default for most documents</td><td class="cell-muted">Still blind to where topics change</td></tr>
+        <tr><td class="cell-title">Structure-aware</td><td class="cell-muted">Headings, sections, code blocks, table rows</td><td>Markdown, HTML, policies, code</td><td class="cell-muted">Sections can be very uneven in size</td></tr>
+        <tr><td class="cell-title">Semantic</td><td class="cell-muted">Where neighbouring sentences stop being similar</td><td>Long prose with no headings</td><td class="cell-muted">Embedding cost at ingestion, a threshold to tune</td></tr>
+        <tr><td class="cell-title">Parent-child</td><td class="cell-muted">Small children for search, big parent sent to the LLM</td><td>You need sharp search and full context</td><td class="cell-muted">More storage, more moving parts</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Bonus: give every chunk its context</h3>
+  <p>A chunk like "Refunds take 5 to 7 working days" is ambiguous on its own. Which refunds? Prepend the document and section title before embedding, so the vector carries that context too. Anthropic's write-up on <strong>Contextual Retrieval</strong> takes this further: an LLM writes a one-line summary of where each chunk sits in the document, and that line is embedded with the chunk.</p>
+  <div class="ctx-compare">
+    <div class="ctx-card"><h4>Plain chunk</h4><p>Refunds to the original payment method take 5 to 7 working days.</p></div>
+    <div class="ctx-card" style="border-color:var(--accent3)"><h4 style="color:var(--accent3)">With a context header</h4><p><span class="ck-hdr">Refund Policy › 4. Food Quality Complaints ›</span> Refunds to the original payment method take 5 to 7 working days.</p></div>
+  </div>
+  <div class="note-box">
+    <div class="note-box-icon">💡</div>
+    <p class="note-box-text"><strong>A sensible starting point:</strong> recursive splitting at around 800 to 1,000 characters with 10–20% overlap, plus a section header on each chunk. Then test with 20 real customer questions and adjust. Chunk size is tuned, not guessed.</p>
+  </div>
+
+  <div class="quiz-box">
+    <div class="quiz-label">Quick check · 1 of 2</div>
+    <p class="quiz-question">Why do we add overlap between chunks?</p>
+    <div class="quiz-options" id="q5a">
+      <button onclick="answerQuiz('q5a', this, true)" class="quiz-option">A &nbsp;—&nbsp; So a sentence cut at a boundary still appears whole in one of the chunks</button>
+      <button onclick="answerQuiz('q5a', this, false)" class="quiz-option">B &nbsp;—&nbsp; To make each embedding vector shorter</button>
+    </div>
+    <div class="quiz-feedback hidden" id="q5a-feedback"></div>
+  </div>
+  <div class="quiz-box">
+    <div class="quiz-label">Quick check · 2 of 2</div>
+    <p class="quiz-question">In parent-child retrieval, what gets searched and what gets sent to the LLM?</p>
+    <div class="quiz-options" id="q5b">
+      <button onclick="answerQuiz('q5b', this, true)" class="quiz-option">A &nbsp;—&nbsp; Search the small children, send the bigger parent</button>
+      <button onclick="answerQuiz('q5b', this, false)" class="quiz-option">B &nbsp;—&nbsp; Search the big parents, send the small children</button>
+    </div>
+    <div class="quiz-feedback hidden" id="q5b-feedback"></div>
+  </div>
+</section>
+
+<!-- ═════════ 06 RERANKING ═════════ -->
+<section class="section-block animate-fade-up" id="reranking">
+  <div class="section-header">
+    <div class="section-num-big">06</div>
+    <div class="section-header-text">
+      <div class="section-title">Reranking and hybrid search</div>
+      <div class="section-subtitle">Vector search finds the right neighbourhood. Reranking finds the right house.</div>
+    </div>
+  </div>
+
+  <p>Vector search is fast, but it's rough. It compares two vectors that were made <strong>separately</strong>, so texts that share a vibe ("refund", "money back") can outrank the text that actually answers the question. To see why, compare the two kinds of model.</p>
+
+  <div class="stepper" id="st-enc" tabindex="0" aria-label="Bi-encoder versus cross-encoder. Use the arrow keys to step.">
+    <div class="stage">
+      <div class="stack">
+        <div class="st" data-on="0-1">
+          <h4>Bi-encoder · what vector search uses</h4>
+          <div class="enc">
+            <div class="enc-lane">
+              <div class="enc-box">Question<small>"spoiled biryani, money back?"</small></div>
+              <div class="enc-arr"></div><div class="enc-model">embedding model</div><div class="enc-arr"></div>
+              <div class="enc-vec">[0.02, -0.11, …]</div>
+            </div>
+            <div class="enc-lane">
+              <div class="enc-box">Chunk §3.1<small>"Cancelled orders: refund in 5–7 days"</small></div>
+              <div class="enc-arr"></div><div class="enc-model">embedding model</div><div class="enc-arr"></div>
+              <div class="enc-vec">[0.03, -0.09, …]</div>
+              <span class="enc-pre">computed earlier, at ingestion</span>
+            </div>
+            <div class="enc-join"><span class="mono" style="font-size:12px;color:var(--muted)">cosine(question, chunk) =</span><span class="score neutral">0.82</span><span class="chip chip-gold">ranked #1</span></div>
+            <div class="enc-warn st" data-on="1"><strong style="color:inherit">The problem:</strong> each text was squashed into a vector on its own. The model never put "spoiled" next to "cancelled" to compare them. Both talk about refunds, so the vectors look close, and the wrong chunk wins.</div>
+          </div>
+        </div>
+        <div class="st" data-on="2">
+          <h4>Cross-encoder · what a reranker uses</h4>
+          <div class="enc">
+            <div class="enc-lane">
+              <div class="enc-box pair">Question + Chunk §3.1<small>read together, word by word</small></div>
+              <div class="enc-arr"></div><div class="enc-model cross">cross-encoder</div><div class="enc-arr"></div>
+              <span class="score bad">0.31</span>
+            </div>
+            <div class="enc-lane">
+              <div class="enc-box pair">Question + Chunk §4.3<small>read together, word by word</small></div>
+              <div class="enc-arr"></div><div class="enc-model cross">cross-encoder</div><div class="enc-arr"></div>
+              <span class="score good">0.94</span>
+            </div>
+            <p style="margin:4px 0 0;font-size:13.5px">Because it reads both texts at once, it notices that "spoiled food" and "cancelled order" are different situations. The output is one relevance score per pair.</p>
+          </div>
+        </div>
+        <div class="st" data-on="3">
+          <h4>So why not use a cross-encoder for everything?</h4>
+          <div class="cost-grid">
+            <div class="cost-card"><h4 style="color:var(--accent2)">Bi-encoder search</h4><div class="cost-big"><span id="cost-bi">1</span> model run</div><p>Embed the question once, then a fast index lookup over 10,000 stored vectors. Chunk vectors were computed in advance.</p></div>
+            <div class="cost-card"><h4 style="color:var(--accent)">Cross-encoder on every chunk</h4><div class="cost-big"><span id="cost-cross">0</span> model runs</div><p>Nothing can be precomputed, because each score needs the question. Every question means scoring every chunk again.</p></div>
+          </div>
+        </div>
+        <div class="st" data-on="4">
+          <h4>The two-stage pattern</h4>
+          <div class="funnel">
+            <div class="fn-bar fn-1">10,000 chunks in the database</div>
+            <div class="fn-bar fn-2">Top 20 from vector search<small>bi-encoder · fast</small></div>
+            <div class="fn-bar fn-3">Top 3 after reranking<small>cross-encoder</small></div>
+            <div class="fn-bar fn-4">→ the LLM</div>
+          </div>
+          <p style="margin:14px 0 0;font-size:13.5px">Cast a wide net cheaply, then spend the expensive model on only 20 candidates. Bar widths show the funnel shape, not the counts.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Reranking in action</h3>
+  <div class="stepper" id="st-rr" tabindex="0" aria-label="Reranking demo. Use the arrow keys to step.">
+    <div class="stage">
+      <div class="rr-q"><span>Customer</span>My biryani arrived spoiled. Can I get my money back?</div>
+      <ol class="rr-list" id="rr-list"></ol>
+    </div>
+  </div>
+
+  <div class="code-block">
+    <div class="code-header"><span class="code-label">rerank.js · add after vector search</span><button onclick="copyCode(this)" class="code-copy-btn">copy</button></div>
+    <pre class="code-pre" data-hl="js">import { CohereRerank } from "@langchain/cohere";
+
+// 1. Wide net: 20 candidates from vector search
+const candidates = await vectorStore.similaritySearch(question, 20);
+
+// 2. Rerank: a cross-encoder scores each (question, chunk) pair
+const reranker = new CohereRerank({ model: "rerank-v3.5", topN: 3 }); // check Cohere docs for the current model name
+const top3 = await reranker.compressDocuments(candidates, question);
+
+top3.forEach((doc) =&gt; console.log(doc.metadata.relevanceScore, doc.pageContent.slice(0, 60)));</pre>
+  </div>
+  <p>Other rerankers you'll hear about: <strong>BAAI bge-reranker</strong> (open source, run it yourself), <strong>Jina Reranker</strong> and <strong>Voyage rerank</strong>. They all do the same job: take a question and a list of chunks, return them re-ordered with a relevance score.</p>
+
+  <hr class="divider">
+
+  <h3>Hybrid search: when meaning isn't enough</h3>
+  <p>Embeddings are great at meaning and bad at exact strings. Coupon codes like <code>SORRY50</code>, order IDs like <code>KE-48213</code>, product SKUs and error codes all look like noise to an embedding model. Old-school keyword search, called <strong>BM25</strong>, nails them. <strong>Hybrid search</strong> runs both and merges the two ranked lists.</p>
+
+  <div class="stepper" id="st-rrf" tabindex="0" aria-label="Hybrid search with reciprocal rank fusion. Use the arrow keys to step.">
+    <div class="stage">
+      <div class="rrf-q"><span>Customer</span>Can I use SORRY50 on order KE-48213?</div>
+      <div class="rrf-grid">
+        <div class="rrf-col"><div class="rrf-h">Vector search ranking</div><ol id="rrf-vec"></ol></div>
+        <div class="rrf-col"><div class="rrf-h">BM25 keyword ranking</div><ol id="rrf-bm"></ol></div>
+        <div class="rrf-col st from-right" data-on="2"><div class="rrf-h">Merged with RRF</div><ol id="rrf-merged"></ol></div>
+      </div>
+      <div class="rrf-formula st" data-on="1-">RRF score = 1 / (60 + rank in vector list) + 1 / (60 + rank in BM25 list)</div>
+    </div>
+  </div>
+  <div class="concept-box">
+    <div class="concept-box-label">Key Concept · Reciprocal Rank Fusion (RRF)</div>
+    <p class="concept-box-text">Vector scores (0 to 1) and BM25 scores (0 to 20-something) are on different scales, so you can't just add them. RRF ignores the raw scores and uses <strong>ranks</strong>: being near the top of either list earns points. The constant 60 is the usual default; it stops a single #1 from dominating. Atlas, Elasticsearch, OpenSearch and Weaviate all support some form of hybrid search.</p>
+  </div>
+
+  <h3>The full production pipeline</h3>
+  <div class="flow-diagram">
+    <div class="flow-step" style="--i:0"><div class="flow-connector"><div class="flow-dot flow-dot-accent"></div><div class="flow-line"></div></div><div class="flow-content"><div class="flow-title">Customer question</div><div class="flow-desc">"My biryani arrived spoiled, order KE-48213. Money back?"</div></div></div>
+    <div class="flow-step" style="--i:1"><div class="flow-connector"><div class="flow-dot flow-dot-accent"></div><div class="flow-line"></div></div><div class="flow-content"><div class="flow-title">Hybrid retrieval: vector top 20 + BM25 top 20</div><div class="flow-desc">Meaning and exact words, in parallel. Apply metadata filters here (city, user's access level).</div></div></div>
+    <div class="flow-step" style="--i:2"><div class="flow-connector"><div class="flow-dot flow-dot-accent"></div><div class="flow-line"></div></div><div class="flow-content"><div class="flow-title">Merge with RRF</div><div class="flow-desc">One combined list of candidates.</div></div></div>
+    <div class="flow-step" style="--i:3"><div class="flow-connector"><div class="flow-dot flow-dot-accent"></div><div class="flow-line"></div></div><div class="flow-content"><div class="flow-title">Rerank with a cross-encoder, keep the top 3–5</div><div class="flow-desc">The expensive, accurate step, on a small list.</div></div></div>
+    <div class="flow-step" style="--i:4"><div class="flow-connector"><div class="flow-dot flow-dot-accent"></div><div class="flow-line"></div></div><div class="flow-content"><div class="flow-title">Build the prompt</div><div class="flow-desc">Rules ("answer only from context, cite sections") + chunks + question.</div></div></div>
+    <div class="flow-step" style="--i:5"><div class="flow-connector"><div class="flow-dot flow-dot-green"></div></div><div class="flow-content"><div class="flow-title">LLM answers with citations</div><div class="flow-desc">Grounded, cheap, and checkable.</div></div></div>
+  </div>
+
+  <div class="quiz-box">
+    <div class="quiz-label">Quick check · 1 of 2</div>
+    <p class="quiz-question">Why not run the cross-encoder over all 10,000 chunks for every question?</p>
+    <div class="quiz-options" id="q6a">
+      <button onclick="answerQuiz('q6a', this, true)" class="quiz-option">A &nbsp;—&nbsp; It needs one full model run per (question, chunk) pair, which is far too slow</button>
+      <button onclick="answerQuiz('q6a', this, false)" class="quiz-option">B &nbsp;—&nbsp; Cross-encoders only work with English text</button>
+    </div>
+    <div class="quiz-feedback hidden" id="q6a-feedback"></div>
+  </div>
+  <div class="quiz-box">
+    <div class="quiz-label">Quick check · 2 of 2</div>
+    <p class="quiz-question">A customer asks whether coupon SORRY50 applies to them. What helps most?</p>
+    <div class="quiz-options" id="q6b">
+      <button onclick="answerQuiz('q6b', this, true)" class="quiz-option">A &nbsp;—&nbsp; Adding BM25 keyword search (hybrid search)</button>
+      <button onclick="answerQuiz('q6b', this, false)" class="quiz-option">B &nbsp;—&nbsp; Switching to an embedding model with more dimensions</button>
+    </div>
+    <div class="quiz-feedback hidden" id="q6b-feedback"></div>
+  </div>
+</section>
+
+<!-- ═════════ 07 INTERVIEW BANK ═════════ -->
+<section class="section-block animate-fade-up" id="interview">
+  <div class="section-header">
+    <div class="section-num-big">07</div>
+    <div class="section-header-text">
+      <div class="section-title">Interview question bank</div>
+      <div class="section-subtitle">What gets asked about RAG right now, with answers you can say out loud</div>
+    </div>
+  </div>
+
+  <p>Try answering each one yourself before you open it. A strong answer names the trade-off, not just the definition.</p>
+  <div class="qa-tools"><button class="qa-btn" type="button" id="qa-open">Open all</button><button class="qa-btn" type="button" id="qa-close">Close all</button></div>
+
+  <div class="qa-group"><span class="badge badge-accent">Basics</span></div>
+  <details class="qa"><summary><span class="qn">Q1</span><span>What is RAG, in one or two lines?</span><span class="plus">+</span></summary><div class="qa-body">
+    <p>At question time, we retrieve the most relevant pieces of our own data and put them in the prompt, so the LLM answers from those facts instead of from memory. It lets a general model answer questions about private, fresh data without retraining it.</p>
+  </div></details>
+  <details class="qa"><summary><span class="qn">Q2</span><span>What problem does RAG solve?</span><span class="plus">+</span></summary><div class="qa-body">
+    <ul><li>LLMs have a knowledge cutoff and have never seen your private data.</li><li>When they don't know, they hallucinate confidently.</li><li>Pasting all your documents into the prompt is too expensive, too slow, hits the context limit, and buries the key fact in the middle.</li></ul>
+    <p>RAG sends only the few chunks that matter for this question.</p>
+  </div></details>
+  <details class="qa"><summary><span class="qn">Q3</span><span>Models have 1M-token context windows now. Is RAG dead?</span><span class="plus">+</span></summary><div class="qa-body">
+    <p>No. Cost and latency still grow with every token on every call, accuracy still drops when a fact is buried in a huge prompt, many knowledge bases are bigger than any window, and RAG handles freshness and per-user access control. Prompt caching cuts repeat cost but not the rest. Long context and RAG work together: a bigger window lets you send more retrieved chunks, and bigger ones.</p>
+  </div></details>
+
+  <div class="qa-group"><span class="badge badge-blue">Embeddings</span></div>
+  <details class="qa"><summary><span class="qn">Q4</span><span>What is an embedding? What does each dimension mean?</span><span class="plus">+</span></summary><div class="qa-body">
+    <p>A fixed-length list of numbers (for example 1,024 for mistral-embed) that places text in a space where similar meanings are close together. Individual dimensions aren't human-readable. Meaning is spread across all of them, learned during training.</p>
+  </div></details>
+  <details class="qa"><summary><span class="qn">Q5</span><span>Cosine similarity vs dot product vs Euclidean distance?</span><span class="plus">+</span></summary><div class="qa-body">
+    <ul><li><strong>Cosine</strong> compares direction only and ignores vector length.</li><li><strong>Dot product</strong> is cosine multiplied by both lengths.</li><li><strong>Euclidean</strong> is straight-line distance.</li></ul>
+    <p>If vectors are normalised to length 1 (many embedding APIs do this), all three give the same ranking. Use whatever your embedding model recommends, and set the vector index to match.</p>
+  </div></details>
+  <details class="qa"><summary><span class="qn">Q6</span><span>Can you mix embeddings from two different models?</span><span class="plus">+</span></summary><div class="qa-body">
+    <p>No. Each model has its own space, and often a different dimension count. Documents and questions must be embedded by the same model. Changing models means re-embedding the whole corpus and rebuilding the index.</p>
+  </div></details>
+
+  <div class="qa-group"><span class="badge badge-green">Chunking</span></div>
+  <details class="qa"><summary><span class="qn">Q7</span><span>How do you choose a chunk size?</span><span class="plus">+</span></summary><div class="qa-body">
+    <p>It depends on the documents and the questions. Too big gives blurry vectors and noisy prompts. Too small loses context. Start with recursive splitting around 800–1,000 characters and 10–20% overlap, respect the document's structure, then measure with a set of real questions (did the right chunk come back in the top k?) and tune.</p>
+  </div></details>
+  <details class="qa"><summary><span class="qn">Q8</span><span>Why use overlap, and what does it cost?</span><span class="plus">+</span></summary><div class="qa-body">
+    <p>Overlap repeats text at chunk boundaries, so a sentence cut by one chunk still appears whole in the next. The cost is duplicated storage and embedding calls, and sometimes near-duplicate chunks in the results.</p>
+  </div></details>
+  <details class="qa"><summary><span class="qn">Q9</span><span>Explain semantic chunking. When is it worth it?</span><span class="plus">+</span></summary><div class="qa-body">
+    <p>Embed each sentence, compare it with the next one, and start a new chunk wherever the similarity drops below a threshold, because the topic changed. It's worth it for long prose without headings (transcripts, articles). For structured docs like policies, structure-aware splitting is cheaper and usually as good.</p>
+  </div></details>
+  <details class="qa"><summary><span class="qn">Q10</span><span>What is parent-child (small-to-big) retrieval?</span><span class="plus">+</span></summary><div class="qa-body">
+    <p>Index small child chunks so search is precise, and store a link to the bigger parent section. When a child matches, send the parent to the LLM. You get sharp matching and complete context.</p>
+  </div></details>
+
+  <div class="qa-group"><span class="badge badge-gold">Retrieval &amp; reranking</span></div>
+  <details class="qa"><summary><span class="qn">Q11</span><span>Bi-encoder vs cross-encoder?</span><span class="plus">+</span></summary><div class="qa-body">
+    <p>A bi-encoder embeds the question and each chunk separately, so chunk vectors can be precomputed and search is fast, but it misses fine details. A cross-encoder reads the question and a chunk together and outputs one relevance score. It's more accurate but needs a model run per pair, so it's only used to rerank a short list.</p>
+  </div></details>
+  <details class="qa"><summary><span class="qn">Q12</span><span>Why rerank instead of just increasing k?</span><span class="plus">+</span></summary><div class="qa-body">
+    <p>A bigger k sends more noise and more tokens, and the right chunk can still land in the middle of a long prompt. Reranking fixes the order so the top 3–5 chunks are the best ones, keeping the prompt small and accurate.</p>
+  </div></details>
+  <details class="qa"><summary><span class="qn">Q13</span><span>What is hybrid search, and how do you merge the results?</span><span class="plus">+</span></summary><div class="qa-body">
+    <p>Run vector search (meaning) and BM25 keyword search (exact terms like codes and IDs) together, then merge the lists. The common merge is Reciprocal Rank Fusion: score = Σ 1/(60 + rank) across lists. It uses ranks, so the two incompatible score scales don't matter.</p>
+  </div></details>
+
+  <div class="qa-group"><span class="badge badge-accent">Production</span></div>
+  <details class="qa"><summary><span class="qn">Q14</span><span>Your RAG bot gives a wrong answer. How do you debug it?</span><span class="plus">+</span></summary><div class="qa-body">
+    <p>Look at the retrieved chunks first. That splits the problem in two:</p>
+    <ul><li><strong>The right chunk wasn't retrieved:</strong> a retrieval problem. Check chunking, try hybrid search, raise k, add reranking, add metadata filters.</li><li><strong>The right chunk was retrieved, but the answer is still wrong:</strong> a generation problem. Fix the prompt rules, the chunk order, or use a stronger model.</li></ul>
+  </div></details>
+  <details class="qa"><summary><span class="qn">Q15</span><span>How do you evaluate a RAG system?</span><span class="plus">+</span></summary><div class="qa-body">
+    <ul><li><strong>Retrieval:</strong> build a test set of real questions with the chunk that should answer each. Measure recall@k (is it in the top k?) and MRR (how high does it rank?).</li><li><strong>Generation:</strong> faithfulness (does the answer stick to the context?) and answer relevance. Tools like RAGAS automate this with an LLM as the judge.</li></ul>
+  </div></details>
+  <details class="qa"><summary><span class="qn">Q16</span><span>How do you keep the knowledge base up to date?</span><span class="plus">+</span></summary><div class="qa-body">
+    <p>Give every chunk a stable ID (document + section) and store a version or updated-at date. When a document changes, delete its old chunks and re-ingest only that document. Schedule it, or trigger it from the system where the docs are edited.</p>
+  </div></details>
+  <details class="qa"><summary><span class="qn">Q17</span><span>How do you stop one customer from seeing internal or another customer's data?</span><span class="plus">+</span></summary><div class="qa-body">
+    <p>Store access info as metadata on each chunk (tenant, role, city) and apply it as a <strong>filter inside the vector query</strong>, so forbidden chunks are never retrieved. Filtering after retrieval risks leaks and returns fewer results.</p>
+  </div></details>
+  <details class="qa"><summary><span class="qn">Q18</span><span>How do you reduce hallucinations in a RAG app?</span><span class="plus">+</span></summary><div class="qa-body">
+    <ul><li>Tell the model to answer only from the context, and give it an exit ("I'll connect a human").</li><li>Ask for citations to chunk IDs or section numbers, so answers can be checked.</li><li>Use a low temperature and improve retrieval first, since a missing chunk forces a guess.</li><li>Measure faithfulness on a test set.</li></ul>
+  </div></details>
+
+  <h3>Debug checklist to remember</h3>
+  <div class="scale-diagram">
+    <span class="highlight">Bot gave a wrong answer</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;↓<br>
+    <span class="highlight">Print the retrieved chunks</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;↓<br>
+    <span class="red">Right chunk missing?</span> → retrieval: chunking · hybrid · k · rerank · filters<br>
+    <span class="green">Right chunk present?</span> → generation: prompt rules · chunk order · model ✅
+  </div>
+</section>
+
+<footer class="site-footer">
+  <span>Sheryians Coding School · RAG Notes</span>
+  <span>  batch · Khaana Express is a fictional example</span>
+</footer>
+
+</div>
+</main>
+</div>
+
+<script>
+/* ═════════ Utilities ═════════ */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const enIN = v => Math.round(v).toLocaleString('en-IN');
+
+function copyCode(btn) {
+  const pre = btn.closest('.code-block').querySelector('pre');
+  const text = pre.innerText;
+  const reset = label => { btn.textContent = label; setTimeout(() => { btn.textContent = 'copy'; }, 1400); };
+  const fallback = () => {
+    const r = document.createRange(); r.selectNodeContents(pre);
+    const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+    reset('selected');
+  };
+  try { navigator.clipboard.writeText(text).then(() => reset('copied'), fallback); } catch (e) { fallback(); }
+}
+
+function answerQuiz(quizId, btn, isCorrect) {
+  const container = document.getElementById(quizId);
+  const feedback = document.getElementById(quizId + '-feedback');
+  container.querySelectorAll('.quiz-option').forEach(b => { b.disabled = true; b.style.opacity = '0.6'; });
+  if (isCorrect) {
+    btn.classList.add('correct');
+    feedback.textContent = '✓ Correct!';
+    feedback.className = 'quiz-feedback correct';
+  } else {
+    btn.classList.add('incorrect');
+    feedback.textContent = '✗ Not quite — try reviewing that section.';
+    feedback.className = 'quiz-feedback incorrect';
+  }
+}
+
+function animateNumber(el, to, opts = {}) {
+  const dur = opts.dur || 700;
+  const fmt = opts.fmt || enIN;
+  const from = Number(el.dataset.val || 0);
+  el.dataset.val = to;
+  cancelAnimationFrame(el._raf);
+  if (reduceMotion) { el.textContent = fmt(to); return; }
+  const t0 = performance.now();
+  const tick = t => {
+    const p = Math.min(1, (t - t0) / dur);
+    const e = 1 - Math.pow(1 - p, 3);
+    el.textContent = fmt(from + (to - from) * e);
+    if (p < 1) el._raf = requestAnimationFrame(tick);
+  };
+  el._raf = requestAnimationFrame(tick);
+}
+
+function scramble(el, finalText, dur = 700) {
+  if (!el) return;
+  cancelAnimationFrame(el._sr);
+  if (reduceMotion) { el.textContent = finalText; return; }
+  const t0 = performance.now();
+  const tick = t => {
+    const p = (t - t0) / dur;
+    if (p >= 1) { el.textContent = finalText; return; }
+    el.textContent = finalText.replace(/\d/g, (d, idx) => (idx / finalText.length < p ? d : String(Math.floor(Math.random() * 10))));
+    el._sr = requestAnimationFrame(tick);
+  };
+  el._sr = requestAnimationFrame(tick);
+}
+
+/* ═════════ Code highlighting ═════════ */
+(function highlightAll() {
+  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const rules = {
+    js: {
+      re: /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`)|\b(import|from|const|let|await|new|return|async|function|export|default|if|else|for|of)\b|\b([A-Z][A-Za-z0-9]+)\b|(\b\d+(?:\.\d+)?\b)|(=&gt;|=>)/g,
+      cls: ['token-comment', 'token-string', 'token-command', 'token-flag', 'token-val', 'token-operator']
+    },
+    sh: {
+      re: /(#[^\n]*)|\b(npm|npx|node)\b|(\s-{1,2}[a-zA-Z][\w-]*)|(@[\w./-]+)/g,
+      cls: ['token-comment', 'token-command', 'token-flag', 'token-val']
+    },
+    json: {
+      re: /("(?:[^"\\]|\\.)*")(\s*:)?|(-?\b\d+(?:\.\d+)?\b)|\b(true|false|null)\b/g,
+      cls: null
+    }
+  };
+  $$('pre[data-hl]').forEach(pre => {
+    const lang = pre.dataset.hl;
+    const rule = rules[lang];
+    if (!rule) return;
+    const src = pre.textContent;
+    let out = '', last = 0;
+    for (const m of src.matchAll(rule.re)) {
+      out += esc(src.slice(last, m.index));
+      if (lang === 'json') {
+        if (m[1] && m[2]) out += '<span class="token-yaml-key">' + esc(m[1]) + '</span>' + esc(m[2]);
+        else if (m[1]) out += '<span class="token-string">' + esc(m[1]) + '</span>';
+        else if (m[3]) out += '<span class="token-val">' + esc(m[3]) + '</span>';
+        else out += '<span class="token-command">' + esc(m[0]) + '</span>';
+      } else {
+        const gi = m.slice(1).findIndex(g => g !== undefined);
+        out += gi >= 0 ? '<span class="' + rule.cls[gi] + '">' + esc(m[0]) + '</span>' : esc(m[0]);
+      }
+      last = m.index + m[0].length;
+    }
+    out += esc(src.slice(last));
+    pre.innerHTML = out;
+  });
+})();
+
+/* ═════════ Stepper ═════════ */
+function parseOn(s) {
+  return s.split(',').map(part => {
+    part = part.trim();
+    if (part.endsWith('-')) return [Number(part.slice(0, -1)), 99];
+    if (part.includes('-')) { const [a, b] = part.split('-').map(Number); return [a, b]; }
+    return [Number(part), Number(part)];
+  });
+}
+
+function makeStepper(id, captions, onStep) {
+  const root = document.getElementById(id);
+  if (!root) return null;
+  const n = captions.length;
+  let i = 0;
+  const bar = document.createElement('div');
+  bar.className = 'stepper-bar';
+  bar.innerHTML =
+    '<button class="step-btn" data-dir="-1" type="button">← Back</button>' +
+    '<div class="stepper-mid"><div class="stepper-caption" aria-live="polite"></div><div class="step-dots">' + '<span class="step-dot"></span>'.repeat(n) + '</div></div>' +
+    '<span class="step-count"></span>' +
+    '<button class="step-btn step-next" data-dir="1" type="button">Forward →</button>';
+  root.appendChild(bar);
+  const [back, next] = $$('.step-btn', bar);
+  const cap = $('.stepper-caption', bar);
+  const count = $('.step-count', bar);
+  const dots = $$('.step-dot', bar);
+  const shows = $$('[data-on]', root).map(el => ({ el, ranges: parseOn(el.dataset.on) }));
+  function go(k, dir) {
+    i = Math.max(0, Math.min(n - 1, k));
+    root.dataset.step = i;
+    shows.forEach(({ el, ranges }) => el.classList.toggle('is-on', ranges.some(([a, b]) => i >= a && i <= b)));
+    cap.innerHTML = captions[i];
+    cap.classList.remove('swap'); void cap.offsetWidth; cap.classList.add('swap');
+    count.textContent = String(i + 1).padStart(2, '0') + ' / ' + String(n).padStart(2, '0');
+    dots.forEach((d, j) => d.classList.toggle('done', j <= i));
+    back.disabled = i === 0;
+    next.disabled = i === n - 1;
+    if (onStep) onStep(i, dir || 0);
+  }
+  bar.addEventListener('click', e => {
+    const b = e.target.closest('.step-btn');
+    if (b && !b.disabled) go(i + Number(b.dataset.dir), Number(b.dataset.dir));
+  });
+  root.addEventListener('keydown', e => {
+    if (e.target.matches('input, textarea, select')) return;
+    if (e.key === 'ArrowRight') { e.preventDefault(); go(i + 1, 1); }
+    if (e.key === 'ArrowLeft') { e.preventDefault(); go(i - 1, -1); }
+  });
+  go(0, 0);
+  return { go, get step() { return i; } };
+}
+
+/* ═════════ 01 · Chat ═════════ */
+makeStepper('st-chat', [
+  'A customer of <strong>Khaana Express</strong>, our made-up food app, gets spoiled biryani and opens the support chat.',
+  'The bot runs on a strong LLM, but it has <strong>never seen Khaana\'s policy documents</strong>. It answers anyway, confidently.',
+  'Every part of that answer breaks a policy rule. The LLM filled the gap with whatever <strong>sounded</strong> most helpful.',
+  'To answer correctly, the bot needs four pieces of <strong>private company knowledge</strong>, at the exact moment the question arrives.',
+  'Same LLM, now handed the right policy paragraphs. The answer follows the rules and cites them. <strong>Getting those paragraphs to the LLM is RAG.</strong>'
+]);
+
+/* ═════════ 02 · Paste the PDF ═════════ */
+(function pasteStepper() {
+  const tokens = [180, 24180, 122180, 214180, 122180, 122180];
+  const fill = $('#ctx-fill'), num = $('#ctx-num'), meter = $('#ctx-meter');
+  const docs = $$('#st-paste .doc');
+  const fmtK = v => (v < 1000 ? (v / 1000).toFixed(1) : (v / 1000).toFixed(v < 10000 ? 1 : 0)) + 'K';
+  const pages = $('#lim-pages');
+  for (let k = 0; k < 24; k++) {
+    const d = document.createElement('div');
+    d.className = 'lim-page' + (k === 12 ? ' hot' : '');
+    const dist = Math.abs(k - 11.5) / 11.5;
+    d.style.setProperty('--o', (0.16 + 0.84 * Math.pow(dist, 1.4)).toFixed(2));
+    d.style.setProperty('--i', k);
+    if (k === 12) d.innerHTML = '<span class="lim-pin">§4.3 is here</span>';
+    pages.appendChild(d);
+  }
+  makeStepper('st-paste', [
+    'Start: the system prompt and the customer\'s question. Tiny. The model has no policy to read yet.',
+    'Paste the <strong>Refund &amp; Quality Policy</strong>. 38 pages, about 24K tokens. The bot can now answer refund questions.',
+    'Customers also ask about coupons, riders and city rules. Paste those too. Now <strong>95% of the context window</strong> is policy text.',
+    'Legal adds the restaurant agreements. <strong>It doesn\'t fit any more.</strong> And real companies have thousands of documents, not five.',
+    'Even when it fits, the model has to find one clause in 191 pages. Facts buried in the <strong>middle</strong> of a long prompt get missed more often.',
+    'And this whole prompt is sent <strong>again with every single message</strong>. Multiply it out.'
+  ], i => {
+    const t = tokens[i];
+    fill.style.width = Math.min(100, (t / 128000) * 100) + '%';
+    meter.classList.toggle('warn', t > 100000 && t <= 128000);
+    meter.classList.toggle('over', t > 128000);
+    animateNumber(num, t, { fmt: v => fmtK(v) + ' / 128K tokens' + (v > 128000 ? ' · limit exceeded' : '') });
+    docs.forEach(d => d.classList.toggle('in', i >= Number(d.dataset.k)));
+  });
+})();
+
+(function calculator() {
+  const rc = $('#r-chats'), rm = $('#r-msgs'), rp = $('#r-price');
+  const PASTE = 122400, RAG = 2400, INR = 88;
+  const usd = v => '$' + (v >= 100 ? Math.round(v).toLocaleString('en-US') : v.toFixed(2));
+  const inr = v => {
+    if (v >= 1e7) return '₹' + (v / 1e7).toFixed(2) + ' crore';
+    if (v >= 1e5) return '₹' + (v / 1e5).toFixed(1) + ' lakh';
+    return '₹' + enIN(v);
+  };
+  function update() {
+    const chats = Number(rc.value), msgs = Number(rm.value), price = Number(rp.value);
+    $('#o-chats').textContent = enIN(chats);
+    $('#o-msgs').textContent = msgs;
+    $('#o-price').textContent = '$' + price.toFixed(2);
+    const cP = chats * msgs * PASTE * price / 1e6;
+    const cR = chats * msgs * RAG * price / 1e6;
+    $('#b-paste').style.width = '100%';
+    $('#b-rag').style.width = Math.max(0.8, (cR / cP) * 100) + '%';
+    $('#v-paste').innerHTML = usd(cP) + ' / day<small>' + inr(cP * INR) + ' a day</small>';
+    $('#v-rag').innerHTML = usd(cR) + ' / day<small>' + inr(cR * INR) + ' a day</small>';
+    $('#v-ratio').innerHTML = 'Same chats, same model. RAG\'s bill is about <strong>' + Math.round(cP / cR) + '× smaller</strong>, a saving of roughly <strong>' + inr((cP - cR) * INR * 30) + ' a month</strong>. The gap grows with every document you add.';
+  }
+  [rc, rm, rp].forEach(r => r.addEventListener('input', update));
+  update();
+})();
+
+makeStepper('st-kw', [
+  'We want the policy paragraph that answers this. Simplest idea: find paragraphs that share <strong>words</strong> with the question.',
+  'Keyword search compares words. The useful words in the question appear in <strong>none</strong> of the policy paragraphs. Zero results.',
+  'Now imagine a search that compares <strong>meaning</strong>. "Rotten food, money back" and "spoiled items get a refund" are the same idea, so §4 scores highest.',
+  'To search by meaning, every text has to become a list of numbers that captures what it means. That list is an <strong>embedding</strong>. Next section.'
+], i => { if (i === 3) scramble($('#kw-vecnums'), '[ 0.0213, -0.1132, 0.0871, 0.0042, -0.0527, 0.0918, … ]', 900); });
+
+/* ═════════ 03 · 3D animal space ═════════ */
+(function animalSpace() {
+  const canvas = $('#space-canvas');
+  const ctx = canvas.getContext('2d');
+  const C = {
+    ink: cssVar('--ink'), muted: cssVar('--muted'), rule: cssVar('--rule'), paper: cssVar('--paper'),
+    x: cssVar('--accent'), y: cssVar('--accent3'), z: cssVar('--accent2'), gold: cssVar('--gold')
+  };
+  const mk = (name, emoji) => ({ name, emoji, pos: [0.5, 0, 0], tgt: [0.5, 0, 0], a: 0, ta: 0, q: 0, tq: 0 });
+  const P = {
+    cat: mk('cat', '🐱'), dog: mk('dog', '🐶'), wolf: mk('wolf', '🐺'), tiger: mk('tiger', '🐯'),
+    dolphin: mk('dolphin', '🐬'), octopus: mk('octopus', '🐙'), eagle: mk('eagle', '🦅'),
+    tractor: mk('tractor', '🚜'), car: mk('car', '🚗'), computer: mk('computer', '💻'), chair: mk('chair', '🪑')
+  };
+  const axes = [
+    { len: 0, tl: 0, names: ['Scale 1 · cat-like ↔ dog-like', 'dim 1'], color: C.x, dir: [1, 0, 0] },
+    { len: 0, tl: 0, names: ['Scale 2 · lives in water', 'dim 2'], color: C.y, dir: [0, 1, 0] },
+    { len: 0, tl: 0, names: ['Scale 3 · flies', 'dim 3'], color: C.z, dir: [0, 0, 1] }
+  ];
+  const groups = [
+    { label: 'land animals', keys: ['cat', 'tiger', 'dog', 'wolf'] },
+    { label: 'sea', keys: ['dolphin', 'octopus'] },
+    { label: 'sky', keys: ['eagle'] },
+    { label: 'vehicles', keys: ['tractor', 'car'] },
+    { label: 'desk things', keys: ['computer', 'chair'] }
+  ];
+  let learned = 0, tLearned = 0;
+  const cam = { yaw: 0, pitch: 0, cx: 0.5, cy: 0, cz: 0, scale: 300 };
+  const tc = { ...cam };
+  let W = 0, H = 0, dpr = 1, step = 0, dragging = false, last = null, visible = true, auto = false, t = 0;
+
+  const set = (k, pos, a = 1, q = 0) => { P[k].tgt = pos; P[k].ta = a; P[k].tq = q; };
+  function applyStep(s) {
+    step = s;
+    Object.keys(P).forEach(k => { P[k].ta = 0; P[k].tq = 0; });
+    axes[0].tl = 1; axes[1].tl = s >= 3 ? 1 : 0; axes[2].tl = s >= 4 ? 1 : 0;
+    tLearned = s >= 6 ? 1 : 0;
+    if (s < 6) {
+      set('cat', [0, 0, 0]); set('dog', [1, 0, 0]);
+      if (s >= 1) { set('wolf', [0.88, 0, 0]); set('tiger', [0.12, 0, 0]); }
+      if (s === 2) set('dolphin', [0.5, 0.28, 0], 1, 1);
+      if (s >= 3) { set('dolphin', [0.5, 0.5, 0]); set('octopus', [0.2, 0.9, 0]); }
+      if (s >= 4) set('eagle', [0.3, 0.12, 0.85]);
+      if (s === 5) {
+        set('tractor', [1.25, 0.95, 0.1], 1, 1); set('car', [1.2, 0.2, 1.05], 1, 1);
+        set('computer', [-0.2, 1.05, 0.9], 1, 1); set('chair', [0.75, 1.15, 0.6], 1, 1);
+      }
+    } else {
+      const L = {
+        cat: [0.12, 0.18, 0.22], tiger: [0.2, 0.12, 0.3], dog: [0.28, 0.22, 0.12], wolf: [0.34, 0.14, 0.2],
+        dolphin: [0.22, 0.78, 0.18], octopus: [0.32, 0.88, 0.26], eagle: [0.22, 0.32, 0.9],
+        tractor: [0.9, 0.16, 0.3], car: [0.84, 0.24, 0.14], computer: [0.72, 0.82, 0.74], chair: [0.86, 0.72, 0.84]
+      };
+      Object.keys(L).forEach(k => set(k, L[k]));
+    }
+    // camera targets
+    if (s <= 2) Object.assign(tc, { yaw: 0, pitch: 0, cx: 0.5, cy: s === 2 ? 0.12 : 0, cz: 0, scale: Math.min(W * 0.72, 560) });
+    else if (s === 3) Object.assign(tc, { yaw: 0, pitch: 0, cx: 0.5, cy: 0.45, cz: 0, scale: Math.min(W * 0.6, H * 0.72) });
+    else Object.assign(tc, { yaw: -0.72, pitch: 0.34, cx: 0.5, cy: 0.45, cz: 0.45, scale: Math.min(W * 0.62, H * 0.72) * (s === 5 ? 0.8 : 1) });
+    auto = s >= 4 && !reduceMotion;
+    if (s === 5) animateNumber($('#dim-num'), 1024, { dur: 1600, fmt: v => enIN(Math.max(3, v)) });
+    else { const dn = $('#dim-num'); dn.dataset.val = 3; dn.textContent = '3'; }
+    if (reduceMotion) snap();
+  }
+  function snap() {
+    Object.values(P).forEach(p => { p.pos = p.tgt.slice(); p.a = p.ta; p.q = p.tq; });
+    axes.forEach(a => { a.len = a.tl; });
+    Object.assign(cam, tc); learned = tLearned;
+  }
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = canvas.clientWidth; H = canvas.clientHeight;
+    canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+    applyStep(step);
+  }
+  function project(p) {
+    let x = p[0] - cam.cx, y = p[1] - cam.cy, z = p[2] - cam.cz;
+    const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw), cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+    const X = x * cy + z * sy;
+    let Z = -x * sy + z * cy;
+    const Y = y * cp - Z * sp;
+    Z = y * sp + Z * cp;
+    const d = 3.4;
+    const s = cam.scale * d / (d - Z);
+    return [W / 2 + X * s, H / 2 - Y * s + 10, s / cam.scale, Z];
+  }
+  const lerp = (a, b, k) => a + (b - a) * k;
+  function frame() {
+    requestAnimationFrame(frame);
+    if (!visible || !W) return;
+    t += 1;
+    const k = reduceMotion ? 1 : 0.08;
+    Object.values(P).forEach(p => {
+      for (let j = 0; j < 3; j++) p.pos[j] = lerp(p.pos[j], p.tgt[j], k);
+      p.a = lerp(p.a, p.ta, k); p.q = lerp(p.q, p.tq, k);
+    });
+    axes.forEach(a => { a.len = lerp(a.len, a.tl, k * 0.8); });
+    learned = lerp(learned, tLearned, k);
+    if (!dragging) {
+      if (auto) tc.yaw += 0.0022;
+      ['yaw', 'pitch', 'cx', 'cy', 'cz', 'scale'].forEach(key => { cam[key] = lerp(cam[key], tc[key], 0.06); });
+    }
+    draw();
+  }
+  function draw() {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    // axes
+    axes.forEach((a, ai) => {
+      if (a.len < 0.01) return;
+      const end = a.dir.map(v => v * 1.12 * a.len);
+      const o = project([0, 0, 0]), e = project(end);
+      ctx.strokeStyle = a.color; ctx.lineWidth = 2; ctx.globalAlpha = Math.min(1, a.len * 1.5);
+      ctx.beginPath(); ctx.moveTo(o[0], o[1]); ctx.lineTo(e[0], e[1]); ctx.stroke();
+      // arrow head
+      const ang = Math.atan2(e[1] - o[1], e[0] - o[0]);
+      ctx.fillStyle = a.color; ctx.beginPath();
+      ctx.moveTo(e[0], e[1]);
+      ctx.lineTo(e[0] - 9 * Math.cos(ang - 0.4), e[1] - 9 * Math.sin(ang - 0.4));
+      ctx.lineTo(e[0] - 9 * Math.cos(ang + 0.4), e[1] - 9 * Math.sin(ang + 0.4));
+      ctx.closePath(); ctx.fill();
+      // ticks 0 and 1
+      [0, 1].forEach(v => {
+        if (v > a.len * 1.12) return;
+        const tp = project(a.dir.map(d => d * v));
+        ctx.fillStyle = C.muted; ctx.font = '500 10px "IBM Plex Mono", monospace'; ctx.textAlign = 'center';
+        if (ai === 0) { ctx.fillText(String(v), tp[0], tp[1] + 18); ctx.fillRect(tp[0] - 0.5, tp[1] - 4, 1, 8); }
+        else if (v === 1) { ctx.fillText('1', tp[0] - 12, tp[1] + 4); }
+      });
+      // label
+      ctx.globalAlpha = Math.min(1, a.len * 1.5) * (1 - learned) + learned * Math.min(1, a.len);
+      ctx.fillStyle = a.color; ctx.font = '600 11px "IBM Plex Mono", monospace';
+      ctx.textAlign = ai === 0 ? 'right' : 'left';
+      const label = learned > 0.5 ? a.names[1] : a.names[0];
+      const lx = ai === 0 ? e[0] : e[0] + 8, ly = ai === 0 ? e[1] + 30 : e[1] - 6;
+      ctx.fillText(label, Math.max(8, Math.min(W - 8, lx)), ly);
+      ctx.globalAlpha = 1;
+    });
+    // halos in learned space
+    if (learned > 0.05) {
+      groups.forEach(g => {
+        const pts = g.keys.map(key => project(P[key].pos));
+        const cx = pts.reduce((s, p) => s + p[0], 0) / pts.length;
+        const cy = pts.reduce((s, p) => s + p[1], 0) / pts.length;
+        const r = Math.max(30, ...pts.map(p => Math.hypot(p[0] - cx, p[1] - cy) + 26));
+        ctx.globalAlpha = 0.9 * learned;
+        ctx.strokeStyle = C.gold; ctx.setLineDash([4, 5]); ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle = C.gold; ctx.font = '600 10px "IBM Plex Mono", monospace'; ctx.textAlign = 'center';
+        ctx.fillText(g.label.toUpperCase(), cx, cy - r - 6);
+        ctx.globalAlpha = 1;
+      });
+    }
+    // points, painter's order
+    const list = Object.values(P).filter(p => p.a > 0.02).map(p => ({ p, pr: project(p.pos) })).sort((a, b) => a.pr[3] - b.pr[3]);
+    list.forEach(({ p, pr }) => {
+      const wob = p.q > 0.05 ? Math.sin(t * 0.12 + p.name.length) * 3 * p.q : 0;
+      const x = pr[0] + wob, y = pr[1];
+      const sc = Math.max(0.7, Math.min(1.35, pr[2]));
+      ctx.globalAlpha = p.a;
+      // stem to the base line for 1D steps
+      ctx.fillStyle = C.ink;
+      ctx.beginPath(); ctx.arc(x, y, 4 * sc, 0, Math.PI * 2); ctx.fill();
+      ctx.font = Math.round(24 * sc) + 'px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+      ctx.fillText(p.emoji, x, y - 10 * sc);
+      ctx.fillStyle = C.muted; ctx.font = '500 ' + Math.round(10.5 * sc) + 'px "IBM Plex Mono", monospace';
+      ctx.fillText(p.name, x, y + 16 * sc);
+      if (p.q > 0.05) {
+        ctx.globalAlpha = p.q * p.a;
+        ctx.strokeStyle = C.x; ctx.setLineDash([3, 3]); ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(x, y - 16 * sc, 22 * sc, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle = C.x; ctx.font = '900 ' + Math.round(18 * sc) + 'px Fraunces, Georgia, serif';
+        ctx.fillText('?', x + 22 * sc, y - 34 * sc);
+      }
+      ctx.globalAlpha = 1;
+    });
+  }
+  canvas.addEventListener('pointerdown', e => { dragging = true; last = [e.clientX, e.clientY]; canvas.setPointerCapture(e.pointerId); });
+  canvas.addEventListener('pointermove', e => {
+    if (!dragging || !last) return;
+    const dx = e.clientX - last[0], dy = e.clientY - last[1];
+    last = [e.clientX, e.clientY];
+    cam.yaw += dx * 0.01; cam.pitch = Math.max(-1.2, Math.min(1.2, cam.pitch + dy * 0.01));
+    tc.yaw = cam.yaw; tc.pitch = cam.pitch;
+  });
+  const end = () => { dragging = false; last = null; };
+  canvas.addEventListener('pointerup', end);
+  canvas.addEventListener('pointercancel', end);
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver(es => { visible = es[0].isIntersecting; }).observe(canvas);
+  }
+  if ('ResizeObserver' in window) new ResizeObserver(resize).observe(canvas);
+  window.addEventListener('resize', resize);
+  resize(); snap(); draw();
+  requestAnimationFrame(frame);
+
+  makeStepper('st-space', [
+    'One measuring scale from 0 to 1. Measure a <strong>cat</strong> and it lands at 0. Measure a <strong>dog</strong> and it lands at 1.',
+    'A <strong>wolf</strong> measures close to a dog, so it lands near 1. A <strong>tiger</strong> lands near the cat. Similar animals, nearby numbers.',
+    'Now a <strong>dolphin</strong>. Where on this line does it go? Nowhere fits. This scale only measures one kind of difference.',
+    'So we add a second scale in a new direction, the <strong>Y-axis</strong>. The dolphin sits around 0.5 on it, and the <strong>octopus</strong> near 0.9.',
+    'An <strong>eagle</strong> fits neither scale. Add a third, the <strong>Z-axis</strong>, and place it there. We are now in 3D. Drag the plot to rotate it.',
+    'But LLMs don\'t only place animals. <strong>Tractors, cars, computers, chairs</strong>, every word in every language. Each new kind of difference needs another scale.',
+    'Real models use hundreds or thousands of scales (<strong>dimensions</strong>). Their axes have no names, but the rule holds: <strong>similar things end up near each other</strong>.'
+  ], applyStep);
+})();
+
+/* ═════════ 03 · Sentence map ═════════ */
+(function sentenceMap() {
+  const q = $('#q-dot');
+  makeStepper('st-map', [
+    'Every policy paragraph has been embedded and placed on the map. Rules about the same thing <strong>cluster together</strong>.',
+    'The customer\'s question is embedded with the same model. It lands right inside the <strong>refunds</strong> cluster, even though it shares no words with those rules.',
+    'Search = find the <strong>nearest points</strong> to the question. Here the three closest are all refund rules.',
+    'Those 3 paragraphs are pulled out and handed to the LLM. That\'s the <strong>R in RAG</strong>: retrieval.'
+  ], i => {
+    q.style.transform = i >= 1 ? 'translate(165px,130px)' : 'translate(585px,22px)';
+    q.style.opacity = i >= 1 ? '1' : '0';
+  });
+})();
+
+/* ═════════ 03 · Cosine ═════════ */
+(function cosineWidget() {
+  const range = $('#cos-range');
+  const O = [170, 180], R = 130;
+  const pairs = [
+    [15, '"rotten food, money back"'],
+    [50, '"goodwill coupon for a bad order"'],
+    [100, '"rider arrived 40 minutes late"'],
+    [181, '"(opposite direction: rare for real text)"']
+  ];
+  function update() {
+    const th = Number(range.value);
+    const rad = th * Math.PI / 180;
+    const bx = O[0] + R * Math.cos(rad), by = O[1] - R * Math.sin(rad);
+    const b = $('#cos-b');
+    b.setAttribute('x2', bx.toFixed(1)); b.setAttribute('y2', by.toFixed(1));
+    const lb = $('#cos-blbl');
+    lb.setAttribute('x', (O[0] + (R + 14) * Math.cos(rad)).toFixed(1));
+    lb.setAttribute('y', (O[1] - (R + 14) * Math.sin(rad) + 4).toFixed(1));
+    const r = 40;
+    const ax = O[0] + r, ay = O[1];
+    const ex = O[0] + r * Math.cos(rad), ey = O[1] - r * Math.sin(rad);
+    $('#cos-arc').setAttribute('d', th < 1 ? '' : 'M' + ax + ' ' + ay + ' A' + r + ' ' + r + ' 0 0 0 ' + ex.toFixed(1) + ' ' + ey.toFixed(1));
+    const mid = rad / 2;
+    const dg = $('#cos-deg');
+    dg.textContent = th + '°';
+    dg.setAttribute('x', (O[0] + 58 * Math.cos(mid)).toFixed(1));
+    dg.setAttribute('y', (O[1] - 58 * Math.sin(mid) + 4).toFixed(1));
+    const c = Math.cos(rad);
+    $('#cos-val').textContent = (c >= 0 ? '' : '−') + Math.abs(c).toFixed(2);
+    const mean = $('#cos-mean');
+    if (c > 0.8) { mean.textContent = 'very similar'; mean.style.color = cssVar('--accent2'); }
+    else if (c > 0.3) { mean.textContent = 'somewhat related'; mean.style.color = cssVar('--gold'); }
+    else if (c > -0.3) { mean.textContent = 'unrelated'; mean.style.color = cssVar('--muted'); }
+    else { mean.textContent = 'opposite direction'; mean.style.color = cssVar('--accent'); }
+    $('#cos-btext').textContent = pairs.find(p => th <= p[0])[1];
+  }
+  range.addEventListener('input', update);
+  update();
+})();
+
+/* ═════════ 04 · Pipelines ═════════ */
+function pipeStep(root, i) {
+  $$('.pipe-node', root).forEach(n => {
+    const k = Number(n.dataset.i);
+    n.classList.toggle('lit', k <= i);
+    n.classList.toggle('current', k === i);
+  });
+  $$('.pipe-link', root).forEach(l => l.classList.toggle('flow', Number(l.dataset.i) <= i));
+}
+(function pipelines() {
+  const ing = $('#st-ingest');
+  makeStepper('st-ingest', [
+    'Ingestion starts with Khaana\'s raw documents. You run this pipeline <strong>before</strong> any customer shows up.',
+    '<strong>Load</strong>: a PDF loader turns each page into plain text plus metadata (file name, page number).',
+    '<strong>Chunk</strong>: split the text into small, self-contained pieces. One idea per chunk, roughly.',
+    '<strong>Embed</strong>: send every chunk to the embedding model. Each one comes back as 1,024 numbers.',
+    '<strong>Store</strong>: save text, vector and metadata together in a database with a vector index. Ingestion done.'
+  ], i => {
+    pipeStep(ing, i);
+    if (i === 3) scramble($('#ing-vec'), '[ 0.0213, -0.1132, 0.0871, 0.0042, … ]', 800);
+  });
+  const ret = $('#st-retrieve');
+  makeStepper('st-retrieve', [
+    'A customer asks a question. Everything from here runs <strong>live</strong>, while they wait.',
+    '<strong>Embed</strong> the question with the <strong>same</strong> model we used for the chunks.',
+    '<strong>Search</strong>: the vector index returns the k chunks whose vectors are nearest to the question\'s vector.',
+    '<strong>Augment</strong>: build a prompt with three parts: the rules, the retrieved chunks, and the question.',
+    '<strong>Generate</strong>: the LLM reads a small, focused prompt instead of 191 pages.',
+    'The answer follows the policy and cites the sections it used, so a human can check it.'
+  ], i => {
+    pipeStep(ret, i);
+    if (i === 1) scramble($('#ret-vec'), '[ 0.0198, -0.1047, 0.0912, 0.0011, … ]', 800);
+  });
+})();
+
+/* ═════════ 05 · Chunk-size trade-off ═════════ */
+(function goldilocks() {
+  const mock = $('#doc-mock');
+  const widths = [52, 92, 70, 88, 94, 64, 80, 48, 90, 76, 60, 44, 86, 72];
+  const kinds = ['head', '', '', '', 'hot', 'hot', '', 'head', '', '', '', 'head', '', ''];
+  widths.forEach((w, r) => {
+    const d = document.createElement('div');
+    d.className = 'dm-line ' + kinds[r];
+    d.style.top = (12 + r * 22 + 6) + 'px';
+    d.style.width = 'calc(' + w + '% - 32px)';
+    mock.appendChild(d);
+  });
+  const A = $('#win-a'), B = $('#win-b');
+  const place = (el, s, n) => { el.style.top = (12 + s * 22 - 2) + 'px'; el.style.height = (n * 22 + 2) + 'px'; };
+  const WIN = [[0, 14], [5, 1], [4, 2], [1, 4]];
+  const MET = [[25, 100, 100], [90, 20, 8], [85, 80, 16], [85, 92, 28]];
+  makeStepper('st-gold', [
+    '<strong>Too big</strong>: one chunk for the whole policy section. It contains the answer, plus everything else.',
+    '<strong>Too small</strong>: one chunk per line. The match is sharp, but the chunk has lost half the clause.',
+    '<strong>Just right</strong>: one chunk per complete idea, here clause 4.3 on its own.',
+    '<strong>Overlap</strong>: if a cut lands inside clause 4.3, the next chunk starts a little earlier and keeps it whole.'
+  ], i => {
+    place(A, WIN[i][0], WIN[i][1]);
+    A.querySelector('.w-lbl').textContent = i === 3 ? 'chunk A' : 'chunk';
+    if (i === 3) { place(B, 4, 4); B.style.opacity = '1'; } else { B.style.opacity = '0'; place(B, WIN[i][0], WIN[i][1]); }
+    [['#m-prec', '#n-prec'], ['#m-ctx', '#n-ctx'], ['#m-tok', '#n-tok']].forEach(([f, nEl], j) => {
+      $(f).style.width = MET[i][j] + '%';
+      animateNumber($(nEl), MET[i][j], { dur: 600 });
+    });
+  });
+})();
+
+/* ═════════ 05 · Chunking lab ═════════ */
+(function chunkLab() {
+  const POLICY = [
+    '## 4. Food Quality Complaints',
+    '4.1 If an item is spoiled, stale, undercooked or unfit for consumption, the customer can raise a quality complaint within 2 hours of delivery.',
+    '4.2 The customer must upload a clear photo of the item. Complaints without a photo go to a human agent for review.',
+    '4.3 After photo verification, the full item value is refunded to the Khaana Wallet within 2 hours. Refunds to the original payment method take 5 to 7 working days.',
+    '',
+    '## 5. Coupons and Goodwill',
+    '5.1 For a verified quality complaint, the agent may add one goodwill coupon worth up to ₹100.',
+    '5.2 Goodwill coupons expire in 14 days and cannot be combined with other offers.',
+    '5.3 The code SORRY50 is only for deliveries that arrive more than 30 minutes late.',
+    '',
+    '## 6. Escalation',
+    '6.1 If the customer reports a foreign object, an allergic reaction or food poisoning, escalate the chat to a human agent immediately.',
+    '6.2 Customers with more than 3 refund requests in 30 days are reviewed by the Trust & Safety team before any refund.'
+  ].join('\n');
+  $('#lab-src').textContent = POLICY;
+
+  const lines = POLICY.split('\n');
+  const sections = [];
+  lines.forEach(l => {
+    if (l.startsWith('## ')) sections.push({ title: l.slice(3), clauses: [] });
+    else if (/^\d\.\d /.test(l)) sections[sections.length - 1].clauses.push(l);
+  });
+  const clauses = sections.flatMap(s => s.clauses);
+  const SIMS = [0.81, 0.77, 0.52, 0.74, 0.43, 0.24, 0.47];
+  const COLORS = ['--accent', '--accent3', '--accent2', '--gold', '--c5', '--c6'];
+
+  const EXPLAIN = {
+    fixed: 'Cut every N characters, no matter what is there. It\'s the simplest loop you can write, and it\'s blind to meaning. Watch the red flags: words and sentences get sliced in half.',
+    overlap: 'Same cut, but each chunk repeats the last few characters of the one before it (highlighted in gold). A sentence cut at a boundary now appears more completely in the next chunk.',
+    recursive: 'Split on blank lines first, then on single lines, then sentences, then words, and only go finer when a piece is still bigger than N. Then merge small neighbours back up to N. This is a simplified version of LangChain\'s RecursiveCharacterTextSplitter, the default you should reach for.',
+    structure: 'Use the document\'s own structure: one chunk per policy section. If a section is bigger than N, split it by clause and put the section title in front of every piece (blue), so each chunk still says what it\'s about.',
+    semantic: 'Embed every clause and compare it with the next one. Where the similarity drops below the threshold, the topic changed, so a new chunk starts. Move the threshold to see the cuts move. Scores here are illustrative.',
+    parent: 'Index small child chunks (one clause each) for precise search. When a child matches, send its whole parent section to the LLM. Here a question about spoiled food matches child 4.1, and the LLM receives all of section 4.'
+  };
+  let strat = 'fixed', animate = true;
+  const rs = $('#r-size'), ro = $('#r-ov'), rt = $('#r-th');
+
+  const trimChunk = (raw, ov = 0) => {
+    const lead = raw.length - raw.replace(/^\s+/, '').length;
+    return { text: raw.trim(), ov: Math.max(0, ov - lead) };
+  };
+  function endFlag(text, nextChar) {
+    const lastLine = text.split('\n').pop();
+    if (lastLine.startsWith('## ')) return 'heading cut off from its section';
+    if (/[.!?)]$/.test(text)) return '';
+    if (nextChar && /\w/.test(nextChar) && /\w$/.test(text)) return 'cuts a word in half';
+    return 'ends mid-sentence';
+  }
+  function fixedSplit(size, ov) {
+    const out = [];
+    const stepLen = Math.max(10, size - ov);
+    for (let s = 0; s < POLICY.length; s += stepLen) {
+      const e = Math.min(POLICY.length, s + size);
+      const c = trimChunk(POLICY.slice(s, e), s === 0 ? 0 : ov);
+      if (c.text) out.push({ ...c, flag: e >= POLICY.length ? '' : endFlag(POLICY.slice(s, e).replace(/\s+$/, ''), POLICY[e]) });
+      if (e >= POLICY.length) break;
+    }
+    return out;
+  }
+  function recSplit(text, seps, size) {
+    const [sep, ...rest] = seps;
+    const parts = text.split(sep);
+    const pieces = parts.map((p, k) => (k < parts.length - 1 ? p + sep : p)).filter(p => p.length);
+    const out = [];
+    pieces.forEach(p => {
+      if (p.length <= size || !rest.length) out.push(p);
+      else out.push(...recSplit(p, rest, size));
+    });
+    return out;
+  }
+  function recursive(size, ov) {
+    const pieces = recSplit(POLICY, ['\n\n', '\n', '. ', ' '], size);
+    const out = [];
+    let cur = '', curOv = 0;
+    pieces.forEach(p => {
+      if ((cur + p).length > size && cur.trim()) {
+        out.push({ raw: cur, ov: curOv });
+        let tail = ov > 0 ? cur.slice(-ov) : '';
+        const sp = tail.indexOf(' ');
+        if (ov > 0 && sp >= 0 && sp < tail.length - 1) tail = tail.slice(sp + 1);
+        if (!ov) tail = '';
+        cur = tail + p; curOv = tail.length;
+      } else cur += p;
+    });
+    if (cur.trim()) out.push({ raw: cur, ov: curOv });
+    return out.map((c, k) => {
+      const t = trimChunk(c.raw, c.ov);
+      return { ...t, flag: k === out.length - 1 ? '' : endFlag(t.text, null) };
+    });
+  }
+  function structure(size) {
+    const out = [];
+    sections.forEach(s => {
+      const whole = '## ' + s.title + '\n' + s.clauses.join('\n');
+      if (whole.length <= size) { out.push({ text: whole, ov: 0, flag: '' }); return; }
+      const hdr = s.title.replace(/^\d+\.\s*/, '') + ' › ';
+      let cur = [];
+      const flush = () => { if (cur.length) out.push({ text: cur.join('\n'), hdr, ov: 0, flag: '' }); cur = []; };
+      s.clauses.forEach(c => {
+        if ((hdr + cur.join('\n') + '\n' + c).length > size && cur.length) flush();
+        cur.push(c);
+      });
+      flush();
+    });
+    return out;
+  }
+  function semantic(th) {
+    const out = [];
+    let cur = [clauses[0]];
+    for (let k = 1; k < clauses.length; k++) {
+      if (SIMS[k - 1] < th) { out.push(cur); cur = []; }
+      cur.push(clauses[k]);
+    }
+    out.push(cur);
+    return out.map(g => ({ text: g.join('\n'), ov: 0, flag: '' }));
+  }
+  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  function render() {
+    const size = Number(rs.value), ov = Math.min(Number(ro.value), size - 20), th = Number(rt.value);
+    $('#o-size').textContent = size; $('#o-ov').textContent = ov; $('#o-th').textContent = th.toFixed(2);
+    $('#ctl-size').hidden = !['fixed', 'overlap', 'recursive', 'structure'].includes(strat);
+    $('#ctl-ov').hidden = !['overlap', 'recursive'].includes(strat);
+    $('#ctl-th').hidden = strat !== 'semantic';
+    $('#lab-explain').textContent = EXPLAIN[strat];
+    const out = $('#lab-out');
+    const simBox = $('#lab-sim');
+    simBox.innerHTML = '';
+
+    if (strat === 'parent') {
+      out.innerHTML = sections.map((s, si) => {
+        const col = 'var(' + COLORS[si % COLORS.length] + ')';
+        const kids = s.clauses.map(c => {
+          const id = c.slice(0, 3);
+          return '<div class="ck-child' + (id === '4.1' ? ' hit' : '') + '"><b>child ' + id + (id === '4.1' ? ' · matched' : '') + '</b>' + esc(c.slice(4)) + '</div>';
+        }).join('');
+        const hit = si === 0;
+        return '<div class="ck' + (animate ? ' anim' : '') + '" style="--ck:' + col + ';--i:' + si + '"><div class="ck-head"><span class="ck-id">parent · §' + esc(s.title) + '</span>' +
+          (hit ? '<span class="chip chip-green">sent to the LLM</span>' : '<span class="chip">stored, not sent</span>') + '</div><div class="ck-children">' + kids + '</div></div>';
+      }).join('');
+      $('#lab-stats').innerHTML = '<span class="chip chip-blue">' + clauses.length + ' children indexed for search</span><span class="chip chip-green">' + sections.length + ' parents stored for context</span>';
+      animate = false;
+      return;
+    }
+
+    let chunks;
+    if (strat === 'fixed') chunks = fixedSplit(size, 0);
+    else if (strat === 'overlap') chunks = fixedSplit(size, ov);
+    else if (strat === 'recursive') chunks = recursive(size, ov);
+    else if (strat === 'structure') chunks = structure(size);
+    else chunks = semantic(th);
+
+    if (strat === 'semantic') {
+      const cols = SIMS.map((v, k) => '<div class="sim-col"><span class="sim-v">' + v.toFixed(2) + '</span><div class="sim-bar' + (v < th ? ' split' : '') + '" style="height:' + Math.round(v * 62) + 'px"></div></div>').join('');
+      const names = SIMS.map((v, k) => '<span>' + clauses[k].slice(0, 3) + '→' + clauses[k + 1].slice(0, 3) + '</span>').join('');
+      simBox.innerHTML = '<div class="gl-lbl">Similarity between neighbouring clauses · red = new chunk starts</div><div class="sim-strip">' + cols +
+        '<div class="sim-th" style="bottom:' + Math.round(th * 62) + 'px"><span>threshold ' + th.toFixed(2) + '</span></div></div><div class="sim-names">' + names + '</div>';
+    }
+
+    out.innerHTML = chunks.map((c, k) => {
+      const col = 'var(' + COLORS[k % COLORS.length] + ')';
+      let body = '';
+      if (c.hdr) body += '<span class="ck-hdr">' + esc(c.hdr) + '</span>';
+      if (c.ov > 0) body += '<mark class="ck-ov">' + esc(c.text.slice(0, c.ov)) + '</mark>' + esc(c.text.slice(c.ov));
+      else body += esc(c.text);
+      const len = (c.hdr ? c.hdr.length : 0) + c.text.length;
+      const flag = c.flag ? '<span class="chip chip-red">✂ ' + c.flag + '</span>' : '<span class="chip chip-green">clean ending</span>';
+      return '<div class="ck' + (animate ? ' anim' : '') + '" style="--ck:' + col + ';--i:' + k + '"><div class="ck-head"><span class="ck-id">chunk ' + (k + 1) + '</span><span class="ck-len">' + len + ' chars</span>' + flag + '</div><div class="ck-text">' + body + '</div></div>';
+    }).join('');
+
+    const bad = chunks.filter(c => c.flag).length;
+    const avg = Math.round(chunks.reduce((s, c) => s + c.text.length + (c.hdr ? c.hdr.length : 0), 0) / chunks.length);
+    $('#lab-stats').innerHTML =
+      '<span class="chip chip-blue">' + chunks.length + ' chunks</span>' +
+      '<span class="chip">avg ' + avg + ' chars</span>' +
+      (bad ? '<span class="chip chip-red">' + bad + ' with a broken ending</span>' : '<span class="chip chip-green">no broken endings</span>') +
+      (strat === 'overlap' || (strat === 'recursive' && ov > 0) ? '<span class="chip chip-gold">overlap highlighted</span>' : '');
+    animate = false;
+  }
+  $('#lab-strats').addEventListener('click', e => {
+    const b = e.target.closest('button[data-s]');
+    if (!b) return;
+    strat = b.dataset.s;
+    $$('#lab-strats button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    if (strat === 'recursive' && Number(rs.value) < 200) rs.value = 300;
+    animate = true;
+    render();
+  });
+  [rs, ro, rt].forEach(r => r.addEventListener('input', render));
+  render();
+})();
+
+/* ═════════ 06 · Bi vs cross ═════════ */
+makeStepper('st-enc', [
+  'Vector search uses a <strong>bi-encoder</strong>: the question and each chunk are turned into vectors <strong>separately</strong>, then compared by cosine.',
+  'Here it ranks the wrong chunk first. "Cancelled order refund" and "spoiled food, money back" both smell like refunds.',
+  'A <strong>cross-encoder</strong> takes the question and one chunk <strong>together</strong> and outputs a relevance score. It sees that §3.1 is about cancellations.',
+  'The catch: it must run once for <strong>every (question, chunk) pair</strong>, and nothing can be precomputed.',
+  'So production systems do both: <strong>retrieve wide</strong> with vectors, then <strong>rerank</strong> a short list with the cross-encoder.'
+], i => {
+  if (i === 3) { animateNumber($('#cost-bi'), 1, { dur: 300 }); animateNumber($('#cost-cross'), 10000, { dur: 1400 }); }
+  else { const c = $('#cost-cross'); c.dataset.val = 0; c.textContent = '0'; }
+});
+
+/* ═════════ 06 · Rerank demo ═════════ */
+(function rerankDemo() {
+  const DATA = [
+    { sec: '§3.1', text: 'Orders cancelled before the restaurant accepts them are refunded to the original payment method in 5–7 working days.', v: 0.82, r: 0.31 },
+    { sec: '§4.3', text: 'After photo verification, the full item value is refunded to the Khaana Wallet within 2 hours.', v: 0.79, r: 0.94, right: true },
+    { sec: '§4.1', text: 'Spoiled, stale or unfit items can be reported as a quality complaint within 2 hours of delivery.', v: 0.77, r: 0.91, right: true },
+    { sec: '§5.1', text: 'For a verified quality complaint, the agent may add one goodwill coupon worth up to ₹100.', v: 0.74, r: 0.66, right: true },
+    { sec: '§7.2', text: 'Refund status can be tracked under Orders › Help in the app.', v: 0.73, r: 0.42 },
+    { sec: '§5.3', text: 'The code SORRY50 is only for deliveries that arrive more than 30 minutes late.', v: 0.69, r: 0.12 }
+  ];
+  const list = $('#rr-list');
+  DATA.forEach((d, k) => {
+    const li = document.createElement('li');
+    li.className = 'rr-item' + (d.right ? ' right' : '');
+    li.dataset.k = k;
+    li.innerHTML = '<span class="rr-rank">' + (k + 1) + '</span><span class="rr-sec">' + d.sec + '</span><span class="rr-text">' + d.text + '</span>' +
+      '<span class="rr-scores"><span class="chip chip-blue">vector ' + d.v.toFixed(2) + '</span><span class="chip chip-green st pop-in" data-on="1-">rerank <b class="rr-r" data-v="' + d.r + '">0.00</b></span></span>';
+    list.appendChild(li);
+  });
+  const items = $$('.rr-item', list);
+  const vecOrder = items.slice();
+  const rrOrder = items.slice().sort((a, b) => DATA[b.dataset.k].r - DATA[a.dataset.k].r);
+  let current = 'vec';
+  function reorder(order) {
+    const first = new Map(items.map(li => [li, li.getBoundingClientRect().top]));
+    order.forEach(li => list.appendChild(li));
+    order.forEach((li, k) => { li.querySelector('.rr-rank').textContent = k + 1; });
+    if (reduceMotion) return;
+    items.forEach(li => {
+      const dy = first.get(li) - li.getBoundingClientRect().top;
+      if (!dy) return;
+      li.style.transition = 'none';
+      li.style.transform = 'translateY(' + dy + 'px)';
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        li.style.transition = 'transform .75s cubic-bezier(.2,.8,.2,1), opacity .4s, border-color .4s, background-color .4s';
+        li.style.transform = '';
+      }));
+    });
+  }
+  makeStepper('st-rr', [
+    'Vector search returns its top 6. Look at #1: it\'s about <strong>cancelled orders</strong>, not spoiled food.',
+    'The reranker reads the question with each chunk and gives every pair a new <strong>relevance score</strong>.',
+    'Sort by the reranker\'s score. The clauses that actually answer the question <strong>jump to the top</strong>.',
+    'Keep only the <strong>top 3</strong> and send them to the LLM. Fewer tokens, and the right ones.'
+  ], i => {
+    const want = i >= 2 ? 'rr' : 'vec';
+    if (want !== current) { reorder(want === 'rr' ? rrOrder : vecOrder); current = want; }
+    $$('.rr-r', list).forEach(b => {
+      if (i >= 1) animateNumber(b, Number(b.dataset.v), { dur: 900, fmt: v => v.toFixed(2) });
+      else { b.dataset.val = 0; b.textContent = '0.00'; }
+    });
+    const order = current === 'rr' ? rrOrder : vecOrder;
+    order.forEach((li, k) => {
+      li.classList.toggle('sent', i === 3 && k < 3);
+      li.classList.toggle('cut', i === 3 && k >= 3);
+    });
+  });
+})();
+
+/* ═════════ 06 · Hybrid search with RRF ═════════ */
+(function rrf() {
+  const T = {
+    '§5.1': 'Goodwill coupon up to ₹100',
+    '§5.2': 'Coupons expire in 14 days',
+    '§5.3': 'SORRY50 only for 30+ min late',
+    '§2.5': 'Late delivery rules, SORRY50',
+    '§7.2': 'Track refunds in Orders › Help'
+  };
+  const vec = ['§5.1', '§5.2', '§5.3', '§2.5', '§7.2'];
+  const bm = ['§5.3', '§2.5', '§5.2', '§7.2', '§5.1'];
+  const K = 60;
+  const score = id => 1 / (K + vec.indexOf(id) + 1) + 1 / (K + bm.indexOf(id) + 1);
+  const merged = vec.slice().sort((a, b) => score(b) - score(a));
+  const li = (id, rank, extra) => '<li class="rrf-li' + (id === '§5.3' ? ' exact' : '') + (extra || '') + '"><span class="r">#' + rank + '</span><b>' + id + '</b><span>' + T[id] + '</span>';
+  $('#rrf-vec').innerHTML = vec.map((id, k) => li(id, k + 1) + '<span class="chip chip-gold calc-chip st" data-on="1-">1/' + (K + k + 1) + '</span></li>').join('');
+  $('#rrf-bm').innerHTML = bm.map((id, k) => li(id, k + 1) + '<span class="chip chip-gold calc-chip st" data-on="1-">1/' + (K + k + 1) + '</span></li>').join('');
+  $('#rrf-merged').innerHTML = merged.map((id, k) => li(id, k + 1, k === 0 ? ' win' : '') + '<span class="chip chip-green calc-chip">' + score(id).toFixed(5) + '</span></li>').join('');
+  makeStepper('st-rrf', [
+    'Two searches, two rankings. Vector search likes general coupon rules. <strong>BM25</strong> spots the exact string "SORRY50" and puts §5.3 first.',
+    'RRF gives each chunk points for its <strong>rank</strong> in each list: 1/(60 + rank). Being near the top of either list helps.',
+    'Add the points and sort. <strong>§5.3 wins</strong>: decent in vector search, first in keyword search. That\'s the one that answers the question.'
+  ]);
+})();
+
+/* ═════════ 07 · Interview bank ═════════ */
+$('#qa-open').addEventListener('click', () => $$('.qa').forEach(d => { d.open = true; }));
+$('#qa-close').addEventListener('click', () => $$('.qa').forEach(d => { d.open = false; }));
+
+/* ═════════ Navigation ═════════ */
+(function nav() {
+  const sidebar = $('#sidebar'), toggle = $('#nav-toggle');
+  toggle.addEventListener('click', () => {
+    const open = !sidebar.classList.contains('open');
+    sidebar.classList.toggle('open', open);
+    toggle.setAttribute('aria-expanded', String(open));
+    toggle.textContent = open ? 'Close' : 'Contents';
+  });
+  $$('.nav-link').forEach(a => a.addEventListener('click', () => {
+    sidebar.classList.remove('open'); toggle.setAttribute('aria-expanded', 'false'); toggle.textContent = 'Contents';
+  }));
+  const links = new Map($$('.nav-link').map(a => [a.getAttribute('href').slice(1), a]));
+  if ('IntersectionObserver' in window) {
+    const io = new IntersectionObserver(entries => {
+      entries.forEach(en => {
+        if (en.isIntersecting) {
+          links.forEach(a => a.classList.remove('active'));
+          const a = links.get(en.target.id);
+          if (a) a.classList.add('active');
+        }
+      });
+    }, { rootMargin: '-35% 0px -60% 0px' });
+    $$('section.section-block').forEach(s => io.observe(s));
+  }
+  const bar = $('#nav-progress');
+  const onScroll = () => {
+    const h = document.documentElement.scrollHeight - window.innerHeight;
+    bar.style.width = (h > 0 ? (window.scrollY / h) * 100 : 0) + '%';
+  };
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+})();
+</script>
+
+</body></html>
