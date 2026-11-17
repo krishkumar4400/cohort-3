@@ -21,7 +21,6 @@ const textSplitter = new RecursiveCharacterTextSplitter({
 const chunks = await textSplitter.splitText(text);
 
 // –––––––––––––––––––––––––– Initialize embeddings [embedding model] –––––––––––––––––––––––––
-
 const embeddings = new CohereEmbeddings({
   model: "embed-v5.0-fast",
   apiKey: process.env.COHERE_API_KEY,
